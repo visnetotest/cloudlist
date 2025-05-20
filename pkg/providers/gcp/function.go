@@ -27,7 +27,7 @@ func (d *cloudFunctionsProvider) GetResource(ctx context.Context) (*schema.Resou
 		return nil, fmt.Errorf("could not get functions: %s", err)
 	}
 	for _, function := range functions {
-		if function.HttpsTrigger == nil {
+		if function == nil || function.HttpsTrigger == nil {
 			continue
 		}
 		funcUrl, err := url.Parse(function.HttpsTrigger.Url)
