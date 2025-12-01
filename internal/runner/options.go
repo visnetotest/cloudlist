@@ -35,6 +35,8 @@ type Options struct {
 	ExtendedMetadata   bool                // ExtendedMetadata enables extended metadata for providers.
 	ProviderConfig     string              // ProviderConfig is the location of the provider config file.
 	DisableUpdateCheck bool                // DisableUpdateCheck disable automatic update check
+	Report             bool                // Report enables reporting
+	ReportFile         string              // ReportFile is the file to write the report to.
 }
 
 var (
@@ -97,6 +99,10 @@ func ParseOptions() *Options {
 		flagSet.BoolVar(&options.Version, "version", false, "display version of cloudlist"),
 		flagSet.BoolVar(&options.Verbose, "v", false, "display verbose output"),
 		flagSet.BoolVar(&options.Silent, "silent", false, "display only results in output"),
+	)
+	flagSet.CreateGroup("reporting", "Reporting",
+		flagSet.BoolVarP(&options.Report, "report", "r", false, "enable reporting"),
+		flagSet.StringVarP(&options.ReportFile, "report-file", "rf", "report.txt", "file to write the report to"),
 	)
 
 	_ = flagSet.Parse()
@@ -297,8 +303,8 @@ const defaultProviderConfigFile = `#  #Provider configuration file for cloudlist
 # provider: nomad
 #  # nomad_url is the url for nomad server
 #  nomad_url: http:/127.0.0.1:4646/
-#  # nomad_ca_file is the path to nomad CA file
-#  # nomad_ca_file: <path-to-ca-file>.pem
+#  # nomad_ca_.pemle is the path to nomad CA file
+#  # nomad_ca_file: <path-to-ca-file>
 #  # nomad_cert_file is the path to nomad Certificate file
 #  # nomad_cert_file: <path-to-cert-file>.pem
 #  # nomad_key_file is the path to nomad Certificate Key file
@@ -337,7 +343,7 @@ const defaultProviderConfigFile = `#  #Provider configuration file for cloudlist
 #  # identity_endpoint is Openstack identity endpoint used to authenticate
 #  identity_endpoint: <openstack-identity-endpoint>
 #  # domain_name is Openstack domain name used to authenticate
-#  domain_name: <openstack-domain-name>
+#  domain_name: <openstack-domain-.pem
 #  # tenant_name is Openstack tenant name
 #  tenant_name: <openstack-tenant-name>
 #  # username is Openstack username used to authenticate
