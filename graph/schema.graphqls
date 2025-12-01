@@ -1,0 +1,18 @@
+type Asset {
+    public: Boolean!
+    provider: String!
+    service: String!
+    id: String!
+    public_ipv4: String
+    public_ipv6: String
+    private_ipv4: String
+    private_ipv6: String
+    dns_name: String
+    metadata: Map
+}
+
+scalar Map
+
+type Query {
+    assets: [Asset!]!
+}
