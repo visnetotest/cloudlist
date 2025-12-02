@@ -17,6 +17,7 @@ import (
 
 // elbProvider is a provider for AWS Elastic Load Balancing (ELB) resources
 type elbProvider struct {
+	id        string
 	options   ProviderOptions
 	elbClient *elb.ELB
 	session   *session.Session
@@ -73,7 +74,7 @@ func (ep *elbProvider) listELBResources(elbClient *elb.ELB, ec2Client *ec2.EC2) 
 
 		resource := &schema.Resource{
 			Provider: "aws",
-			ID:       *lb.LoadBalancerName,
+			ID:       ep.id,
 			DNSName:  elbDNS,
 			Public:   true,
 			Service:  ep.name(),
@@ -105,7 +106,7 @@ func (ep *elbProvider) listELBResources(elbClient *elb.ELB, ec2Client *ec2.EC2) 
 
 						resource := &schema.Resource{
 							Provider:    "aws",
-							ID:          instanceID,
+							ID:          ep.id,
 							PrivateIpv4: *instance.PrivateIpAddress,
 							Public:      false,
 							Service:     ep.name(),
@@ -218,10 +219,10 @@ func (ep *elbProvider) getLoadBalancerMetadata(lb *elb.LoadBalancerDescription, 
 			}
 		}
 		if len(ports) > 0 {
-			metadata["listener_ports"] = strings.Join(ports, ",")
+				metadata["listener_ports"] = strings.Join(ports, ",")
 		}
 		if len(protocols) > 0 {
-			metadata["listener_protocols"] = strings.Join(protocols, ",")
+				metadata["listener_protocols"] = strings.Join(protocols, ",")
 		}
 	}
 
@@ -266,7 +267,7 @@ func (ep *elbProvider) getTargetInstanceMetadata(instance *ec2.Instance, lb *elb
 	schema.AddMetadata(metadata, "load_balancer_dns", lb.DNSName)
 
 	if len(instance.Tags) > 0 {
-		if tagString := buildTagString(instance.Tags); tagString != "" {
+		if tagString := buildTagString(convertEC2Tags(instance.Tags)); tagString != "" {
 			metadata["instance_tags"] = tagString
 		}
 	}

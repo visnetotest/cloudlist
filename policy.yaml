@@ -1,0 +1,7 @@
+
+- id: block-digital-ocean
+  name: Block Digital Ocean Assets
+  description: "This policy blocks any asset from the Digital Ocean provider."
+  rules:
+    - field: Provider
+      value: digitalocean

@@ -17,6 +17,7 @@ import (
 
 // s3Provider is a provider for aws S3 API
 type s3Provider struct {
+	id      string
 	options ProviderOptions
 	s3      *s3.S3
 	session *session.Session
@@ -65,10 +66,10 @@ func (s *s3Provider) getS3Resources(s3Client *wrappedS3Client) (*schema.Resource
 		}
 
 		list.Append(&schema.Resource{
-			ID:       s.options.Id,
+			ID:       s.id,
 			Public:   true,
 			DNSName:  fmt.Sprintf("%s.s3.amazonaws.com", aws.StringValue(bucket.Name)),
-			Provider: providerName,
+			Provider: "aws",
 			Service:  s.name(),
 			Metadata: metadata,
 		})

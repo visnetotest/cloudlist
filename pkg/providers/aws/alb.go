@@ -18,6 +18,7 @@ import (
 
 // elbV2Provider is a provider for AWS Application Load Balancing (ELBV2) resources
 type elbV2Provider struct {
+	id        string
 	options   ProviderOptions
 	albClient *elbv2.ELBV2
 	session   *session.Session
@@ -73,7 +74,7 @@ func (ep *elbV2Provider) listELBV2Resources(albClient *elbv2.ELBV2, ec2Client *e
 
 		resource := &schema.Resource{
 			Provider: "aws",
-			ID:       *lb.LoadBalancerName,
+			ID:       ep.id,
 			DNSName:  albDNS,
 			Public:   true,
 			Service:  ep.name(),
@@ -120,7 +121,7 @@ func (ep *elbV2Provider) listELBV2Resources(albClient *elbv2.ELBV2, ec2Client *e
 
 							resource := &schema.Resource{
 								Provider:    "aws",
-								ID:          instanceID,
+								ID:          ep.id,
 								PrivateIpv4: *instance.PrivateIpAddress,
 								Public:      false,
 								Service:     ep.name(),
@@ -305,7 +306,7 @@ func (ep *elbV2Provider) getTargetInstanceMetadata(instance *ec2.Instance, targe
 		}
 	}
 	if len(instance.Tags) > 0 {
-		if tagString := buildTagString(instance.Tags); tagString != "" {
+		if tagString := buildTagString(convertEC2Tags(instance.Tags)); tagString != "" {
 			metadata["instance_tags"] = tagString
 		}
 	}

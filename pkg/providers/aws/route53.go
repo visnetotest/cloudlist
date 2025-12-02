@@ -16,6 +16,7 @@ import (
 
 // route53Provider is a provider for aws Route53 API
 type route53Provider struct {
+	id      string
 	options ProviderOptions
 	route53 *route53.Route53
 	session *session.Session
@@ -121,18 +122,18 @@ func (r *route53Provider) listResourcesByZone(zones []*route53.HostedZone, clien
 				}
 
 				list.Append(&schema.Resource{
-					ID:       r.options.Id,
+					ID:       r.id,
 					Public:   public,
 					DNSName:  name,
-					Provider: providerName,
+					Provider: "aws",
 					Service:  r.name(),
 					Metadata: metadata,
 				})
 
 				resource := &schema.Resource{
-					ID:       r.options.Id,
+					ID:       r.id,
 					Public:   public,
-					Provider: providerName,
+					Provider: "aws",
 					Service:  r.name(),
 				}
 
@@ -177,7 +178,7 @@ func (r *route53Provider) getRoute53Metadata(zone *route53.HostedZone, client *r
 		zoneId := aws.StringValue(zone.Id)
 		metadata["zone_id"] = zoneId
 	}
-	schema.AddMetadata(metadata, "zone_name", zone.Name)
+	schema.AddMetadata(metadata, "zone_.name", zone.Name)
 	if zone.Config != nil && zone.Config.PrivateZone != nil {
 		metadata["private_zone"] = fmt.Sprintf("%v", aws.BoolValue(zone.Config.PrivateZone))
 	}

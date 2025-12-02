@@ -16,6 +16,7 @@ import (
 
 // lightsailProvider is an instance provider for AWS Lightsail API
 type lightsailProvider struct {
+	id       string
 	options  ProviderOptions
 	lsClient *lightsail.Lightsail
 	session  *session.Session
@@ -71,8 +72,8 @@ func (l *lightsailProvider) listListsailResources(lsClient *lightsail.Lightsail)
 			}
 
 			resource := &schema.Resource{
-				ID:          l.options.Id,
-				Provider:    providerName,
+				ID:          l.id,
+				Provider:    "aws",
 				PrivateIpv4: privateIPv4,
 				PublicIPv4:  publicIPv4,
 				Public:      publicIPv4 != "",

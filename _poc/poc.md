@@ -1,70 +1,59 @@
-# Proof of Concept (PoC) Strategy
+## PoC 1: Native Policy Engine (MVP)
 
-## Strategic Context
+### 1. Vision & Goals
 
-This document outlines two parallel Proof of Concept (PoC) initiatives designed to accelerate `cloudlist`'s evolution from a discovery tool into a full-fledged Asset Intelligence Platform. These PoCs represent a dual-track strategy:
+The primary goal of this PoC is to validate the feasibility and value of a native, in-process policy evaluation engine for `cloudlist`. This MVP will focus on creating a simple, fast, and easy-to-use policy system that can serve as a foundation for more advanced security and compliance features.
 
-1.  **The Policy Engine PoC (Feature-Track)**: Focuses on delivering immediate, tangible value to users by adding a critical security and compliance feature to the existing architecture.
-2.  **The Asset Intelligence PoC (Platform-Track)**: Focuses on a foundational architectural shift to an event-driven model, enabling a future generation of 10x capabilities and ensuring long-term scalability.
+The goals are to:
 
-This approach allows us to ship value to users now while simultaneously investing in the strategic platform for tomorrow.
-
----
-
-# PoC 1: The Policy Engine
-
-**Objective**: To validate the core functionality of a native "Policy as Code" engine that can evaluate user-defined rules against discovered assets.
-
-### 1. Goals
-
-*   **Prove Technical Feasibility**: Demonstrate that we can successfully build and integrate a native policy evaluator into the `cloudlist` scan process.
-*   **Validate Data Models**: Confirm that the proposed `Policy` and `PolicyReport` data models are effective and ergonomic for users.
+*   **Build the Core Evaluator**: Implement a native policy evaluator in Go that can process `cloudlist`'s JSON output against a set of user-defined rules.
+*   **Validate Data Models**: Confirm that the proposed `Policy` and `Violation` data models are effective and ergonomic for users.
 *   **Establish a Foundation**: Build a solid, extensible foundation for future, more advanced policy features (e.g., OPA integration, auto-remediation).
 
 ### 2. Success Criteria
 
-*   **Technical Validation**: The engine must successfully evaluate a sample set of 5 distinct policies (e.g., checking for public S3 buckets, unencrypted disks) against a corpus of 100+ mock assets, producing a 100% accurate JSON report.
+*   **Technical Validation**: The engine must successfully evaluate a sample set of policies against a corpus of mock assets, producing a 100% accurate report.
 *   **Performance Validation**: The policy evaluation process must add no more than a 20% time overhead to a standard `cloudlist` scan for the targeted resource types.
 *   **Architectural Validation**: The final code must provide a clean, pluggable interface for the evaluator, allowing a future `OPAEvaluator` to be added with minimal refactoring of the core engine.
 
 ### 3. Key Risks & Mitigation Strategies
 
-*   **Risk**: The native rule logic becomes overly complex and difficult to maintain.
-    *   **Mitigation**: We will strictly adhere to the declarative `all`/`any` structure defined in the TRD. More complex procedural logic will be explicitly deferred to the future OPA integration phase.
-*   **Risk**: Performance overhead exceeds the 20% target, making it unusable for large scans.
-    *   **Mitigation**: We will conduct performance profiling early in the development process, focusing on the efficiency of asset-to-policy matching before evaluation.
+*   **Risk: Policy Logic Complexity**: The native evaluator's simple key-value matching may be insufficient for real-world security policies, leading to a dead-end design.
+    *   **Mitigation**: The PoC scope is intentionally limited to simple matching. The architectural success criterion explicitly requires a **pluggable interface**, ensuring that we can easily replace the native evaluator with a more powerful engine like OPA in the future without a major rewrite.
 
-### 4. Benefits
+*   **Risk: Performance Overhead**: The evaluation process could significantly slow down `cloudlist` scans, making it impractical for large environments.
+    *   **Mitigation**: A hard performance budget (<= 20% overhead) is a primary success criterion. We will implement benchmarking from the start and focus on efficient in-memory processing to stay within this budget.
 
-*   **For Users (Security & DevOps Teams)**: Immediately automates the tedious, error-prone process of manually checking for common misconfigurations, freeing up operators to focus on higher-value work.
-*   **For the Business**: Directly reduces organizational risk by systematically and automatically identifying known-bad configurations. It provides a clear, repeatable mechanism to demonstrate compliance to auditors.
+### 4. Status & Next Steps
+
+*   **Status**: **Completed & Integrated**
+*   **Summary**: The core MVP is functional and has been fully integrated into the `cloudlist` application. The code, now located in `pkg/policy`, can be triggered via command-line flags (`--policy-file`, `--policy-block`). It loads policies from a YAML file, evaluates them against discovered cloud assets, and reports any violations. All goals of PoC 1 have been met.
+*   **Next Steps**: With the foundational policy engine in place, the project will now move to **PoC 2: The Asset Intelligence Platform Core**. This next phase will focus on re-architecting `cloudlist` into an event-driven platform to enable real-time asset correlation and enrichment, as outlined in the goals for PoC 2.
 
 ---
 
-# PoC 2: The Asset Intelligence Platform Core
+## PoC 2: The Asset Intelligence Platform Core
 
-**Objective**: To validate the foundational paradigm shift from a batch-oriented tool to an event-driven, stream-processing platform.
+### 1. Vision & Goals
 
-### 1. Goals
+This Proof of Concept marks a fundamental architectural shift, moving from a synchronous, batch-oriented tool to an **event-driven, stream-processing platform**. This is the foundational step required to deliver the real-time, contextual intelligence envisioned in the Asset Intelligence PRD, enabling use cases like rapid vulnerability investigation and blast radius analysis.
 
-*   **Prove Event-Driven Architecture**: Demonstrate the viability of a decoupled, microservice-based architecture using an event bus as the central nervous system.
-*   **Validate Core Correlation Concept**: Build a functioning, albeit simple, "Correlation Service" to prove out the concept of unifying raw discovery events into a canonical asset identity.
-*   **Establish a Scalable Pattern**: Create a foundational code structure for building future real-time stream-processing services (e.g., enrichment, policy, graph loading).
+The goals are to:
+
+*   **Build the Core Pipeline**: Implement a basic event-driven pipeline using an event bus (NATS) to decouple asset discovery from downstream processing.
+*   **Validate the Correlation Engine**: Create a "Correlation Service" that subscribes to raw discovery events and intelligently merges them into a single, canonical asset identity.
+*   **Prove the Paradigm**: Demonstrate that this event-driven model is a viable and scalable foundation for building future real-time services (e.g., enrichment, graph modeling, policy evaluation).
 
 ### 2. Success Criteria
 
-*   **Technical Validation**: The `cloudlist agent` command must successfully launch and run an end-to-end event pipeline: a collector must publish `RawDiscoveryEvent`s, the `CorrelationService` must consume them and publish `CorrelatedAssetEvent`s, and a `LoggerSink` must correctly output the final, correlated events to the console.
-*   **Architectural Validation**: The event bus interface and service templates must be generic. We must demonstrate that a new stream-processing service can be added to the agent without modifying the core bus or existing services.
-*   **Decoupling Validation**: The collector and correlation services must run as independent, concurrent goroutines that communicate *only* through the event bus, with no direct dependencies.
+*   **End-to-End Event Flow**: Successfully publish raw asset data from at least two different `cloudlist` providers (e.g., AWS, GCP) as distinct events onto the event bus.
+*   **Successful Correlation**: The Correlation Service must correctly consume raw events and merge data for the same logical asset (e.g., an EC2 instance and a Route53 record pointing to it) into a single, unified `CanonicalAsset` record.
+*   **Architectural Validation**: The final code must demonstrate clear separation of concerns between producers (cloudlist adapters) and consumers (Correlation Service), proving the decoupled nature of the architecture.
 
 ### 3. Key Risks & Mitigation Strategies
 
-*   **Risk**: The in-memory event bus is too simplistic and hides real-world distributed systems challenges (e.g., backpressure, delivery guarantees).
-    *   **Mitigation**: The PoC will focus on defining clean, bus-agnostic interfaces for services. The services should not know if the underlying bus is in-memory channels or a production system like Kafka, ensuring future swappability.
-*   **Risk**: The concept of a "Universal Asset ID" proves too complex to implement in a simple PoC.
-    *   **Mitigation**: The correlation service will use a simple, deterministic hashing method based on key asset properties (e.g., ARN, resource ID). This validates the *flow* of correlation while deferring the *complexity* of the logic itself.
+*   **Risk: Architectural Complexity**: Introducing an event bus and microservices adds significant operational complexity (deployment, monitoring, local development) compared to the current single-binary model.
+    *   **Mitigation**: We will use **Docker Compose** to create a fully self-contained local development environment. This allows any developer to spin up the entire stack (NATS, Correlation Service, etc.) with a single command, mitigating setup friction. Production complexity is acknowledged but deferred to a later phase.
 
-### 4. Benefits
-
-*   **For Users (Platform & SRE Teams)**: This is the critical first step toward providing near real-time asset visibility, eliminating the problem of stale data from periodic scans.
-*   **For the Business**: This PoC unlocks the path to a modern, highly scalable architecture. It is the foundational investment required to reduce Mean Time to Detect (MTTD) from hours to seconds and to enable future strategic capabilities like attack path analysis and automated remediation, creating significant market differentiation.
+*   **Risk: Asset Correlation Logic**: Defining a "canonical asset" is notoriously difficult. A simple IP-based correlation may fail to merge related assets (e.g., a load balancer and its instances) or incorrectly merge unrelated ones (e.g., ephemeral IPs).
+    *   **Mitigation**: The PoC will focus on a **narrow, well-defined correlation strategy** (e.g., linking a known Public IP to a DNS name). We will explicitly *not* try to solve all correlation edge cases. The goal is to prove the *pipeline* is viable, not to perfect the correlation algorithm at this stage.

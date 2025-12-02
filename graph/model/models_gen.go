@@ -2,25 +2,18 @@
 
 package model
 
-type Mutation struct {
-}
-
-type NewTodo struct {
-	Text   string `json:"text"`
-	UserID string `json:"userId"`
+type Asset struct {
+	Public      bool           `json:"public"`
+	Provider    string         `json:"provider"`
+	Service     string         `json:"service"`
+	ID          string         `json:"id"`
+	PublicIpv4  *string        `json:"public_ipv4,omitempty"`
+	PublicIpv6  *string        `json:"public_ipv6,omitempty"`
+	PrivateIpv4 *string        `json:"private_ipv4,omitempty"`
+	PrivateIpv6 *string        `json:"private_ipv6,omitempty"`
+	DNSName     *string        `json:"dns_name,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type Query struct {
-}
-
-type Todo struct {
-	ID   string `json:"id"`
-	Text string `json:"text"`
-	Done bool   `json:"done"`
-	User *User  `json:"user"`
-}
-
-type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
 }

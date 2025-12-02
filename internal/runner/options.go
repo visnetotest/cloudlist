@@ -37,11 +37,13 @@ type Options struct {
 	DisableUpdateCheck bool                // DisableUpdateCheck disable automatic update check
 	Report             bool                // Report enables reporting
 	ReportFile         string              // ReportFile is the file to write the report to.
+	PolicyFile         string              // PolicyFile is the file to write the policy to.
+	PolicyBlock        bool                // PolicyBlock blocks the output if a policy is violated.
 }
 
 var (
-	defaultConfigLocation             = filepath.Join(userHomeDir(), ".config/cloudlist/config.yaml")
-	defaultProviderConfigLocation     = filepath.Join(userHomeDir(), ".config/cloudlist/provider-config.yaml")
+	defaultConfigLocation         = filepath.Join(userHomeDir(), ".config/cloudlist/config.yaml")
+	defaultProviderConfigLocation = filepath.Join(userHomeDir(), ".config/cloudlist/provider-config.yaml")
 	defaultProviders, defaultServies  = []string{}, []string{}
 	allowedProviders, allowedServices = []string{}, []string{}
 )
@@ -103,6 +105,10 @@ func ParseOptions() *Options {
 	flagSet.CreateGroup("reporting", "Reporting",
 		flagSet.BoolVarP(&options.Report, "report", "r", false, "enable reporting"),
 		flagSet.StringVarP(&options.ReportFile, "report-file", "rf", "report.txt", "file to write the report to"),
+	)
+	flagSet.CreateGroup("policy", "Policy",
+		flagSet.StringVarP(&options.PolicyFile, "policy-file", "pf", "", "file to read policy from"),
+		flagSet.BoolVarP(&options.PolicyBlock, "policy-block", "pb", false, "block output if policy is violated"),
 	)
 
 	_ = flagSet.Parse()
@@ -343,7 +349,7 @@ const defaultProviderConfigFile = `#  #Provider configuration file for cloudlist
 #  # identity_endpoint is Openstack identity endpoint used to authenticate
 #  identity_endpoint: <openstack-identity-endpoint>
 #  # domain_name is Openstack domain name used to authenticate
-#  domain_name: <openstack-domain-.pem
+#  domain_name: <openstack-domain-.pem>
 #  # tenant_name is Openstack tenant name
 #  tenant_name: <openstack-tenant-name>
 #  # username is Openstack username used to authenticate

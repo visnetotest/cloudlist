@@ -20,6 +20,7 @@ import (
 
 // lambdaAndapiGatewayProvider is a provider for AWS Lambda and API Gateway resources
 type lambdaAndapiGatewayProvider struct {
+	id           string
 	options      ProviderOptions
 	lambdaClient *lambda.Lambda
 	apiGateway   *apigateway.APIGateway
@@ -89,7 +90,7 @@ func (ap *lambdaAndapiGatewayProvider) listAPIGateways(regionName string, apiGat
 
 		list.Append(&schema.Resource{
 			Provider: "aws",
-			ID:       *api.Id,
+			ID:       ap.id,
 			DNSName:  apiBaseURL,
 			Public:   true,
 			Service:  "apigateway",
@@ -182,7 +183,7 @@ func (ap *lambdaAndapiGatewayProvider) listAPIGatewayLambdaIntegrations(regionNa
 
 							list.Append(&schema.Resource{
 								Provider: "aws",
-								ID:       fmt.Sprintf("%s-%s", *api.Id, functionARN),
+								ID:       ap.id,
 								DNSName:  integrationURL,
 								Public:   true,
 								Service:  "api-gateway-lambda-integration",
@@ -224,7 +225,7 @@ func (ap *lambdaAndapiGatewayProvider) listAPIGatewayV2s(regionName string, apiG
 
 			list.Append(&schema.Resource{
 				Provider: "aws",
-				ID:       aws.StringValue(api.ApiId),
+				ID:       ap.id,
 				DNSName:  apiBaseURL,
 				Public:   true,
 				Service:  "apigatewayv2",
@@ -420,14 +421,4 @@ func extractLambdaARN(uri string) string {
 		return parts[3]
 	}
 	return ""
-}
-
-func buildAwsMapTagString(tags map[string]*string) string {
-	var tagPairs []string
-	for key, value := range tags {
-		if value != nil {
-			tagPairs = append(tagPairs, fmt.Sprintf("%s=%s", key, aws.StringValue(value)))
-		}
-	}
-	return strings.Join(tagPairs, ",")
 }

@@ -9,6 +9,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/projectdiscovery/cloudlist/pkg/inventory"
+	"github.com/projectdiscovery/cloudlist/pkg/policy"
 	"github.com/projectdiscovery/cloudlist/pkg/schema"
 	"github.com/projectdiscovery/gologger"
 )
@@ -89,17 +90,7 @@ func (r *Runner) Enumerate() {
 		gologger.Fatal().Msgf("Could not create inventory: %s\n", err)
 	}
 
-	var output *os.File
-	if r.options.Output != "" {
-		outputFile, err := os.Create(r.options.Output)
-		if err != nil {
-			gologger.Fatal().Msgf("Could not create output file %s: %s\n", r.options.Output, err)
-		}
-		output = outputFile
-	}
-
-	builder := &bytes.Buffer{}
-	deduplicator := schema.NewResourceDeduplicator()
+	var allResources []*schema.Resource
 	for _, provider := range inventory.Providers {
 		gologger.Info().Msgf("Listing assets from provider: %s services: %s id: %s", provider.Name(), strings.Join(provider.Services(), ","), provider.ID())
 
@@ -108,105 +99,107 @@ func (r *Runner) Enumerate() {
 			gologger.Warning().Msgf("Could not get resources for provider %s %s: %s\n", provider.Name(), provider.ID(), err)
 			continue
 		}
-		var hostsCount, ipCount int
-		for _, instance := range instances.Items {
-			// Skip if already processed
-			if !deduplicator.ProcessResource(instance) {
-				continue
+		allResources = append(allResources, instances.Items...)
+	}
+
+	if r.options.PolicyFile != "" {
+		gologger.Info().Msg("Evaluating policies...")
+		policies, err := policy.LoadPoliciesFromYAML(r.options.PolicyFile)
+		if err != nil {
+			gologger.Fatal().Msgf("Could not load policies: %s\n", err)
+		}
+		nativeEvaluator := policy.NewNativeEvaluator()
+		violations, err := nativeEvaluator.Evaluate(policies, allResources)
+		if err != nil {
+			gologger.Warning().Msgf("Could not evaluate policies: %s\n", err)
+		} else if len(violations) > 0 {
+			gologger.Warning().Msgf("Found %d policy violations\n", len(violations))
+			for _, violation := range violations {
+				assetIdentifier := getAssetIdentifier(violation.Asset)
+				gologger.Warning().Msgf("  - Policy: %s, Asset: %s, Rule: %s=%s\n", violation.PolicyName, assetIdentifier, violation.ViolatedRule.Field, violation.ViolatedRule.Value)
 			}
+			if r.options.PolicyBlock {
+				gologger.Fatal().Msgf("Exiting due to policy violations and policy-block flag.")
+			}
+		} else {
+			gologger.Info().Msg("No policy violations found.")
+		}
+	}
 
-			builder.Reset()
+	var output *os.File
+	if r.options.Output != "" {
+		outputFile, err := os.Create(r.options.Output)
+		if err != nil {
+			gologger.Fatal().Msgf("Could not create output file %s: %s\n", r.options.Output, err)
+		}
+		defer outputFile.Close()
+		output = outputFile
+	}
 
-			if r.options.JSON {
-				data, err := jsoniter.Marshal(instance)
-				if err != nil {
-					gologger.Verbose().Msgf("ERR: Could not marshal json: %s\n", err)
-				} else {
-					builder.Write(data)
-					builder.WriteString("\n")
+	builder := &bytes.Buffer{}
+	deduplicator := schema.NewResourceDeduplicator()
+	var hostsCount, ipCount int
+	for _, instance := range allResources {
+		// Skip if already processed
+		if !deduplicator.ProcessResource(instance) {
+			continue
+		}
+
+		builder.Reset()
+
+		if r.options.JSON {
+			data, err := jsoniter.Marshal(instance)
+			if err != nil {
+				gologger.Verbose().Msgf("ERR: Could not marshal json: %s\n", err)
+			} else {
+				builder.Write(data)
+				builder.WriteString("\n")
+				if output != nil {
 					output.Write(builder.Bytes()) //nolint
-
-					if instance.DNSName != "" {
-						hostsCount++
-					}
-					if instance.PrivateIpv4 != "" {
-						ipCount++
-					}
-					if instance.PrivateIpv6 != "" {
-						ipCount++
-					}
-					if instance.PublicIPv4 != "" {
-						ipCount++
-					}
-					if instance.PublicIPv6 != "" {
-						ipCount++
-					}
-					gologger.Silent().Msgf("%s", builder.String())
-					builder.Reset()
 				}
-				continue
-			}
 
-			if r.options.Hosts {
 				if instance.DNSName != "" {
 					hostsCount++
-					builder.WriteString(instance.DNSName)
-					builder.WriteRune('\n')
-					output.WriteString(builder.String()) //nolint
-					builder.Reset()
-					gologger.Silent().Msgf("%s", instance.DNSName)
 				}
-				continue
-			}
-			if r.options.IPAddress {
+				if instance.PrivateIpv4 != "" {
+					ipCount++
+				}
+				if instance.PrivateIpv6 != "" {
+					ipCount++
+				}
 				if instance.PublicIPv4 != "" {
 					ipCount++
-					builder.WriteString(instance.PublicIPv4)
-					builder.WriteRune('\n')
-					output.WriteString(builder.String()) //nolint
-					builder.Reset()
-					gologger.Silent().Msgf("%s", instance.PublicIPv4)
 				}
 				if instance.PublicIPv6 != "" {
 					ipCount++
-					builder.WriteString(instance.PublicIPv6)
-					builder.WriteRune('\n')
-					output.WriteString(builder.String()) //nolint
-					builder.Reset()
-					gologger.Silent().Msgf("%s", instance.PublicIPv6)
 				}
-				if instance.PrivateIpv4 != "" && !r.options.ExcludePrivate {
-					ipCount++
-					builder.WriteString(instance.PrivateIpv4)
-					builder.WriteRune('\n')
-					output.WriteString(builder.String()) //nolint
-					builder.Reset()
-					gologger.Silent().Msgf("%s", instance.PrivateIpv4)
-				}
-				if instance.PrivateIpv6 != "" && !r.options.ExcludePrivate {
-					ipCount++
-					builder.WriteString(instance.PrivateIpv6)
-					builder.WriteRune('\n')
-					output.WriteString(builder.String()) //nolint
-					builder.Reset()
-					gologger.Silent().Msgf("%s", instance.PrivateIpv6)
-				}
-				continue
+				gologger.Silent().Msgf("%s", builder.String())
+				builder.Reset()
 			}
+			continue
+		}
 
+		if r.options.Hosts {
 			if instance.DNSName != "" {
 				hostsCount++
 				builder.WriteString(instance.DNSName)
 				builder.WriteRune('\n')
-				output.WriteString(builder.String()) //nolint
+				if output != nil {
+					output.WriteString(builder.String()) //nolint
+				}
 				builder.Reset()
 				gologger.Silent().Msgf("%s", instance.DNSName)
 			}
+			continue
+		}
+		if r.options.IPAddress {
 			if instance.PublicIPv4 != "" {
 				ipCount++
 				builder.WriteString(instance.PublicIPv4)
 				builder.WriteRune('\n')
-				output.WriteString(builder.String()) //nolint
+				if output != nil {
+					output.WriteString(builder.String()) //nolint
+				}
 				builder.Reset()
 				gologger.Silent().Msgf("%s", instance.PublicIPv4)
 			}
@@ -214,7 +207,9 @@ func (r *Runner) Enumerate() {
 				ipCount++
 				builder.WriteString(instance.PublicIPv6)
 				builder.WriteRune('\n')
-				output.WriteString(builder.String()) //nolint
+				if output != nil {
+					output.WriteString(builder.String()) //nolint
+				}
 				builder.Reset()
 				gologger.Silent().Msgf("%s", instance.PublicIPv6)
 			}
@@ -222,7 +217,9 @@ func (r *Runner) Enumerate() {
 				ipCount++
 				builder.WriteString(instance.PrivateIpv4)
 				builder.WriteRune('\n')
-				output.WriteString(builder.String()) //nolint
+				if output != nil {
+					output.WriteString(builder.String()) //nolint
+				}
 				builder.Reset()
 				gologger.Silent().Msgf("%s", instance.PrivateIpv4)
 			}
@@ -230,29 +227,96 @@ func (r *Runner) Enumerate() {
 				ipCount++
 				builder.WriteString(instance.PrivateIpv6)
 				builder.WriteRune('\n')
-				output.WriteString(builder.String()) //nolint
+				if output != nil {
+					output.WriteString(builder.String()) //nolint
+				}
 				builder.Reset()
 				gologger.Silent().Msgf("%s", instance.PrivateIpv6)
 			}
+			continue
 		}
-		logBuilder := &strings.Builder{}
-		if hostsCount != 0 {
-			logBuilder.WriteString(strconv.Itoa(hostsCount))
-			logBuilder.WriteString(" Hosts")
-		}
-		if ipCount != 0 {
-			if hostsCount != 0 {
-				logBuilder.WriteString(" and ")
+
+		if instance.DNSName != "" {
+			hostsCount++
+			builder.WriteString(instance.DNSName)
+			builder.WriteRune('\n')
+			if output != nil {
+				output.WriteString(builder.String()) //nolint
 			}
-			logBuilder.WriteString(strconv.Itoa(ipCount))
-			logBuilder.WriteString(" IP Addresses")
+			builder.Reset()
+			gologger.Silent().Msgf("%s", instance.DNSName)
 		}
-		if hostsCount == 0 && ipCount == 0 {
-			gologger.Warning().Msgf("No results found for %s (%s)\n", provider.Name(), provider.ID())
-		} else {
-			gologger.Info().Msgf("Found %s for %s (%s)\n", logBuilder.String(), provider.Name(), provider.ID())
+		if instance.PublicIPv4 != "" {
+			ipCount++
+			builder.WriteString(instance.PublicIPv4)
+			builder.WriteRune('\n')
+			if output != nil {
+				output.WriteString(builder.String()) //nolint
+			}
+			builder.Reset()
+			gologger.Silent().Msgf("%s", instance.PublicIPv4)
+		}
+		if instance.PublicIPv6 != "" {
+			ipCount++
+			builder.WriteString(instance.PublicIPv6)
+			builder.WriteRune('\n')
+			if output != nil {
+				output.WriteString(builder.String()) //nolint
+			}
+			builder.Reset()
+			gologger.Silent().Msgf("%s", instance.PublicIPv6)
+		}
+		if instance.PrivateIpv4 != "" && !r.options.ExcludePrivate {
+			ipCount++
+			builder.WriteString(instance.PrivateIpv4)
+			builder.WriteRune('\n')
+			if output != nil {
+				output.WriteString(builder.String()) //nolint
+			}
+			builder.Reset()
+			gologger.Silent().Msgf("%s", instance.PrivateIpv4)
+		}
+		if instance.PrivateIpv6 != "" && !r.options.ExcludePrivate {
+			ipCount++
+			builder.WriteString(instance.PrivateIpv6)
+			builder.WriteRune('\n')
+			if output != nil {
+				output.WriteString(builder.String()) //nolint
+			}
+			builder.Reset()
+			gologger.Silent().Msgf("%s", instance.PrivateIpv6)
 		}
 	}
+	logBuilder := &strings.Builder{}
+	if hostsCount != 0 {
+		logBuilder.WriteString(strconv.Itoa(hostsCount))
+		logBuilder.WriteString(" Hosts")
+	}
+	if ipCount != 0 {
+		if hostsCount != 0 {
+			logBuilder.WriteString(" and ")
+		}
+		logBuilder.WriteString(strconv.Itoa(ipCount))
+		logBuilder.WriteString(" IP Addresses")
+	}
+	if hostsCount == 0 && ipCount == 0 {
+		gologger.Warning().Msgf("No results found")
+	} else {
+		gologger.Info().Msgf("Found %s", logBuilder.String())
+	}
+}
+
+func getAssetIdentifier(asset *schema.Resource) string {
+	if asset.DNSName != "" {
+		return asset.DNSName
+	}
+	if asset.PublicIPv4 != "" {
+		return asset.PublicIPv4
+	}
+	if asset.PrivateIpv4 != "" {
+		return asset.PrivateIpv4
+	}
+	return asset.ID
 }
 
 func Contains(s []string, e string) bool {
