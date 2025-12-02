@@ -15,7 +15,9 @@ import (
 )
 
 // Services is the list of services supported by the AWS provider
-var Services = []string{"ec2", "elb", "alb", "s3"}
+var Services = []string{"ec2", "elb", "alb", "s3", "cloudfront", "ecs", "eks", "lambda-api-gateway", "lightsail", "route53"}
+
+const ProviderName = "aws"
 
 // ProviderOptions contains options for the AWS provider
 type ProviderOptions struct {
@@ -49,20 +51,24 @@ type Provider struct {
 // New creates a new provider for AWS.
 func New(options schema.OptionBlock) (schema.Provider, error) {
 	id, _ := options.GetMetadata("id")
+	extendedMetadataStr, _ := options.GetMetadata("extended_metadata")
+	extendedMetadata := extendedMetadataStr == "true"
 
-	// For the MVP, we'''ll use the default credential chain.
-	// This will be expanded later to support more authentication methods.
 	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		return nil, err
 	}
 
-	return &Provider{id: id, session: cfg}, nil
+	opts := &ProviderOptions{
+		ExtendedMetadata: extendedMetadata,
+	}
+
+	return &Provider{id: id, session: cfg, options: opts}, nil
 }
 
 // Name returns the name of the provider.
 func (p *Provider) Name() string {
-	return "aws"
+	return ProviderName
 }
 
 // ID returns the name of the provider account.
@@ -70,11 +76,15 @@ func (p *Provider) ID() string {
 	return p.id
 }
 
-// Resources returns the provider'''s resources.
+// Resources returns the provider's resources.
 func (p *Provider) Resources(ctx context.Context) (*schema.Resources, error) {
-	// For the MVP, we will start with EC2 instances.
-	// This will be expanded to other services later.
-	instanceProvider := &instanceProvider{ec2Client: ec2.NewFromConfig(p.session)}
+	// A simple PoC to list EC2 instances
+	// In the future, we will iterate over enabled services
+	instanceProvider := &instanceProvider{
+		id:               p.id,
+		ec2Client:        ec2.NewFromConfig(p.session),
+		extendedMetadata: p.options.ExtendedMetadata,
+	}
 	return instanceProvider.GetResources(ctx)
 }
 
@@ -86,8 +96,6 @@ func (p *Provider) Services() []string {
 // parseARN parses a given AWS ARN and returns its components.
 // An ARN is expected to be in the format: arn:partition:service:region:account-id:resource-id
 func parseARN(arn string) *ARNComponents {
-	// Define the regex for parsing ARNs
-	// Example: arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0
 	re := regexp.MustCompile(`^arn:(?P<Partition>[^:]+):(?P<Service>[^:]+):(?P<Region>[^:]*):(?P<AccountID>[^:]*):(?P<ResourceType>[^/:]+)(?:/|:)(?P<ResourceID>.*)$`)
 
 	if !re.MatchString(arn) {

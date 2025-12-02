@@ -57,3 +57,14 @@ The goals are to:
 
 *   **Risk: Asset Correlation Logic**: Defining a "canonical asset" is notoriously difficult. A simple IP-based correlation may fail to merge related assets (e.g., a load balancer and its instances) or incorrectly merge unrelated ones (e.g., ephemeral IPs).
     *   **Mitigation**: The PoC will focus on a **narrow, well-defined correlation strategy** (e.g., linking a known Public IP to a DNS name). We will explicitly *not* try to solve all correlation edge cases. The goal is to prove the *pipeline* is viable, not to perfect the correlation algorithm at this stage.
+
+### 4. Status & Next Steps
+
+*   **Status**: **In Progress**
+*   **Summary**: Foundational work for the event-driven architecture has begun. A temporary file-based event queue has been implemented in `pkg/pipeline`, which validates the basic event model. However, this is a placeholder and the core goal of PoC 2—a real-time, stream-processing platform—has not yet been achieved. The next steps will focus on replacing the file-based queue with a robust event bus (NATS) and creating the first independent microservice for asset correlation.
+*   **Next Steps**:
+    1.  **Integrate NATS**: Replace the file-based queue in `pkg/pipeline` with a NATS client to create a true event bus.
+    2.  **Create `services/` Directory**: Create a new top-level `services/` directory to house the new, independent microservices.
+    3.  **Create Correlation Service**: Create the initial directory and boilerplate for the `correlation-service` within the `services/` directory.
+    4.  **Develop Event Producer**: Implement the logic in the main `cloudlist` application to publish asset discovery events to the NATS event bus.
+    5.  **Develop Event Consumer**: Implement the initial logic in the `correlation-service` to subscribe to the NATS event bus and receive asset discovery events.
