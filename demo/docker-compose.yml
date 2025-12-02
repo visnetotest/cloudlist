@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:3.0
+    ports:
+      - "4566:4566" # Main endpoint for all services
+    environment:
+      - SERVICES=s3,ec2
+      - DEBUG=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+
+  aws-setup:
+    image: amazon/aws-cli:2.13.29
+    depends_on:
+      - localstack
+    volumes:
+      - ./aws-setup.sh:/aws-setup.sh
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: /bin/sh
+    command: >
+      -c "
+        apk add --no-cache curl
+        # Wait for LocalStack to be ready
+        echo 'Waiting for LocalStack...' 
+        while ! curl -s http://localstack:4566/_localstack/health | grep '"s3": "running"' > /dev/null; do 
+          sleep 2 
+        done 
+        echo 'LocalStack is ready. Running setup script.'
+        /aws-setup.sh
+      "
+
+  cloudlist:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      - aws-setup
+    volumes:
+      - ./provider-config.yaml:/app/demo/provider-config.yaml
+      - ./policy.yaml:/app/demo/policy.yaml
+    command: >
+      -c "
+        ./cloudlist \
+          -p aws \
+          -pc /app/demo/provider-config.yaml \
+          -pf /app/demo/policy.yaml \
+          -pb
+      "
+    entrypoint: /bin/sh

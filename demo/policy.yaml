@@ -1,0 +1,6 @@
+- id: public-s3-bucket
+  name: Public S3 Buckets Prohibited
+  description: "This policy flags any S3 bucket that is publicly accessible."
+  rules:
+    - field: s3_is_public
+      value: "true"
