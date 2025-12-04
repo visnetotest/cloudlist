@@ -10,10 +10,15 @@ import (
 	"github.com/projectdiscovery/cloudlist/pkg/schema"
 )
 
+//go:generate mockgen -destination=mock_ec2_test.go -package=aws . EC2Client
+type EC2Client interface {
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+}
+
 // instanceProvider is a provider for AWS EC2 instances.
 type instanceProvider struct {
 	id               string
-	ec2Client        *ec2.Client
+	ec2Client        EC2Client
 	extendedMetadata bool
 }
 
