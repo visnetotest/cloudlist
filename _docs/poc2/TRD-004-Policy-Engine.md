@@ -1,3 +1,4 @@
+
 # TRD-004: Human-Readable Policy Engine
 
 ## 1. Status
@@ -88,6 +89,87 @@ policies:
 
 ```
 
-## 6. Reference
+## 6. Questions and Mitigations
+
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **What happens when we need more complex logic (e.g., conditionals, loops)?** Won't we inevitably outgrow this simple YAML format? | **Mitigation:** This is a deliberate design constraint. The core philosophy is to keep the policy logic simple and push complexity into the provider plugins. If a check requires complex logic (e.g., analyzing the contents of a policy document), the provider should perform that analysis and expose a simple boolean result (e.g., `metadata.has_risky_iam_policy: "true"`). This keeps policies readable and avoids reinventing a full programming language in YAML. If a user truly needs more power, we will provide an "escape hatch" to call out to an external script or a WASM module for evaluation. |
+| **How will we prevent the `metadata` fields from becoming an inconsistent mess across different providers?** | **Mitigation:** We will establish a **Standardized Metadata Vocabulary**—a documented, conventional set of field names for common attributes (e.g., `is_public`, `is_encrypted`, `has_owner_tag`). While providers can add their own custom metadata, they will be strongly encouraged to adhere to the standard vocabulary for common checks. The core `cloudscanner` documentation will include a registry of these standard fields. |
+| **How do we handle policies that need to evaluate relationships between assets (e.g., "find all EC2 instances with a public IP that also have an IAM role with admin privileges")?** | **Mitigation:** The simple key-value rule engine is not designed for this. This is the primary use case for the **Asset Relationship Graph** (TRD-010). Post-PoC, the policy engine will be extended to allow graph-based queries. A policy might look like: `graph.neighbors(asset, {type: 'iam_role', properties: {is_admin: true}}).exists()`. For the PoC, we will focus only on single-asset attribute checks. |
+
+## 7. Diagrams
+
+### 7.1. System Diagram: Policy Evaluation Flow
+
+This diagram shows the journey of an asset from discovery to being evaluated against a policy.
+
+```mermaid
+graph TD
+    subgraph "ProviderPlugins" ["Provider Plugins"]
+        AWS["AWS Provider"]
+    end
+    subgraph "CoreEngine" ["cloudscanner Core Engine"]
+        Discovery["Discovery Engine"]
+        PolicyLoader["Policy Loader"]
+        PolicyEngine["Policy Engine"]
+        Reporter["Reporter"]
+    end
+    subgraph "UserFiles" ["User Files"]
+        Policies["policy.yaml"]
+    end
+
+    AWS -- "Discovers & Normalizes" --> Discovery
+    Discovery -- "Asset Stream" --> PolicyEngine
+    Policies -- "Loads" --> PolicyLoader
+    PolicyLoader -- "Policy Rules" --> PolicyEngine
+    PolicyEngine -- "Identifies Violations" --> Reporter
+    Reporter -- "Outputs to" --> User((User))
+```
+
+### 7.2. Component Diagram: Inside the Policy Engine
+
+This diagram details the internal components of the Policy Engine.
+
+```mermaid
+componentDiagram
+    package "Policy Engine" {
+        ["YAML Parser"]
+        ["Rule Evaluator"]
+        ["Asset Matcher"]
+    }
+    ["YAML Parser"] ..> ["Rule Evaluator"] : "provides rules"
+    ["Rule Evaluator"] ..> ["Asset Matcher"] : "evaluates against"
+    ["Asset Matcher"] ..> ["Asset Stream"] : "reads from"
+```
+
+### 7.3. Sequence Diagram: Evaluating a Single Asset
+
+This sequence illustrates the step-by-step process of the Policy Engine checking one asset against a set of loaded rules.
+
+```mermaid
+sequenceDiagram
+    participant AssetStream
+    participant PolicyEngine
+    participant RuleSet
+    participant ViolationStore
+
+    AssetStream->>PolicyEngine: "asset(S3_Bucket_A)"
+    activate PolicyEngine
+    PolicyEngine->>RuleSet: "get_rules(asset_type=&quot;s3_bucket&quot;)"
+    activate RuleSet
+    RuleSet-->>PolicyEngine: "[s3_public_read_prohibited]"
+    deactivate RuleSet
+
+    loop For Each Rule
+        PolicyEngine->>PolicyEngine: "evaluate(asset.metadata.is_public == &quot;true&quot;)"
+        alt Rule Matches (Violation)
+            PolicyEngine->>ViolationStore: "add_violation(asset, rule)"
+        end
+    end
+    deactivate PolicyEngine
+```
+
+## 8. Reference
 
 This decision is a core component of the product vision and is referenced in the main technical specification: [CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#2.3.-Lightweight-Policy-Engine](./CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#2.3.-Lightweight-Policy-Engine)
+

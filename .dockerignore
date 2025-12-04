@@ -1,0 +1,26 @@
+# Git
+.git
+
+# IDE
+.idea
+.vscode
+
+# Local binaries and vendor directories
+bin
+vendor
+
+# OS generated files
+.DS_Store
+
+# Test files
+*_test.go
+
+# Local config
+*.yaml
+*.yml
+
+# Docs
+_docs/
+
+# Don't ignore the Dockerfile itself
+!Dockerfile

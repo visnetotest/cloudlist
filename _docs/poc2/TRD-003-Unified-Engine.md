@@ -1,3 +1,4 @@
+
 # TRD-003: Unified Engine Architecture
 
 ## 1. Status
@@ -42,6 +43,90 @@ This ensures that the core discovery functionality remains a first-class feature
 *   **Monolithic Nature:** The application is more monolithic compared to a microservice-style architecture. However, this is a deliberate trade-off for operational simplicity and is mitigated by the modular, plugin-based design for providers.
 *   **Single Point of Failure:** As a single process, a crash in one component could halt the entire workflow. This will be mitigated through robust error handling and the inherent stability provided by Rust.
 
-## 5. Reference
+## 5. Questions and Mitigations
+
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **How do we prevent feature bloat in the single binary?** Won't adding more functionality make it unwieldy? | **Mitigation:** A disciplined, modular approach is key. The core binary will remain lean, containing only the essential engine components (loader, discovery, policy, reporter). All provider-specific logic will be in plugins (TRD-001). Future complex features, such as a web UI or a historical database, will be developed as separate, communicating processes, not compiled into the core `cloudscanner` binary. |
+| **If the entire workflow is in one process, how can we ensure responsiveness for long-running scans?** | **Mitigation:** The engine will be built on an asynchronous, multi-threaded foundation using Tokio. Discovery for different providers and services will run in parallel. For large-scale data processing, a streaming model will be used (as outlined in TRD-001) so that evaluation can begin *as* assets are discovered, not after a long collection phase. This ensures the application remains responsive and provides continuous feedback (TRD-012). |
+| **Does a unified engine limit our ability to scale different parts of the system independently?** (e.g., what if discovery is much more resource-intensive than evaluation?) | **Mitigation:** For the vast majority of use cases, a single binary is sufficient and simpler. For extreme-scale scenarios, the unified engine can still be scaled horizontally by running multiple instances of `cloudscanner` with different configurations (e.g., one instance per cloud provider or region). This "shared-nothing" horizontal scaling is simple to implement with standard container orchestrators like Kubernetes. |
+
+## 6. Diagrams
+
+### 6.1. System Diagram: The Unified Engine vs. External Orchestrator
+
+This diagram contrasts the simplicity of the proposed unified model with the complexity of the previous, externally orchestrated model.
+
+```mermaid
+graph TD
+    subgraph "Unified Engine Model (Proposed)"
+        direction LR
+        User1["User"] --> Unified["cloudscanner binary<br/>(Discover, Evaluate, Report)"]
+        Unified --> Output1["Report"]
+    end
+
+    subgraph "External Orchestrator Model (Previous)"
+        direction LR
+        User2["User"] --> Script["Orchestrator Script"]
+        Script --> Discover["Discover Tool"]
+        Discover --> RawData("raw_assets.json")
+        Script --> Evaluate["Evaluate Tool"]
+        RawData --> Evaluate
+        Evaluate --> Report("violations.json")
+        Script --> GenerateReport["Report Generator"]
+        Report --> GenerateReport
+        GenerateReport --> FinalReport["Final Report"]
+    end
+```
+
+### 6.2. Component Diagram: Internal Data Flow
+
+This diagram shows the high-level components within the single binary and how data flows between them in memory.
+
+```mermaid
+componentDiagram
+    package "cloudscanner Unified Engine" {
+        ["CLI Parser"] as CLI
+        ["Config Loader"] as Config
+        ["Discovery Engine"] as Discover
+        ["Policy Engine"] as Evaluate
+        ["Reporter"]
+
+        CLI ..> Config
+        Config ..> Discover
+        Discover ..> Evaluate : "in-memory stream of Assets"
+        Evaluate ..> Reporter : "in-memory stream of Violations"
+    }
+```
+
+### 6.3. Sequence Diagram: Unified Workflow
+
+This sequence illustrates the end-to-end workflow happening within a single process, from user command to final report.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Main as "main()"
+    participant Discovery
+    participant PolicyEngine
+    participant Reporter
+
+    User->>Main: "`cloudscanner --policy s3.yaml`"
+    activate Main
+    Main->>Discovery: "discover_assets()"
+    activate Discovery
+    Discovery-->>PolicyEngine: "asset_stream"
+    deactivate Discovery
+    activate PolicyEngine
+    PolicyEngine-->>Reporter: "violation_stream"
+    deactivate PolicyEngine
+    activate Reporter
+    Reporter-->>User: "Formatted Output"
+    deactivate Reporter
+    deactivate Main
+```
+
+## 7. Reference
 
 This decision is a core principle outlined in the main technical specification: [CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#1.2.-Architectural-Vision:-The-Unified-Engine](./CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#1.2.-Architectural-Vision:-The-Unified-Engine)
+

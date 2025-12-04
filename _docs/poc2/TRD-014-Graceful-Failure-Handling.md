@@ -1,3 +1,4 @@
+
 # TRD-014: Graceful Error and Failure Handling
 
 ## 1. Status
@@ -33,6 +34,74 @@ The `cloudscanner` Core Engine will be designed to handle errors gracefully and 
 
 *   **More Complex Control Flow:** The Core Engine's discovery loop is slightly more complex, as it must handle the `Result` of each provider call.
 
-## 5. Reference
+## 5. Questions and Mitigations
+
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **What constitutes a "fatal" error that *should* stop the whole scan?** | **Mitigation:** A distinction will be made between *provider errors* and *core engine errors*. A provider error (e.g., invalid AWS credentials) is isolated and will not halt the scan. A core engine error (e.g., failure to read the main `cloudscanner.toml` config file, inability to load any plugins) is considered fatal and will cause the application to exit with a non-zero status code. The principle is: if the application cannot perform any useful work at all, it should fail fast. |
+| **How will the final report reflect partial success?** | **Mitigation:** The final JSON report will contain a top-level `summary` object. This object will include a list of `successful_providers` and `failed_providers`. This allows an automated system to programmatically determine if the scan was complete or partial. The human-readable console output will also include a clear summary section at the end. |
+
+## 6. Diagrams
+
+### 6.1. System Diagram: Error Handling Flow
+
+This diagram shows how the Core Engine handles a failure in one provider while continuing with others.
+
+```mermaid
+graph TD
+    subgraph "Core Engine"
+        Start["Start Scan"] --> LoadAWS["Load AWS Provider"]
+        LoadAWS -- "Success" --> ScanAWS["Scan AWS"]
+        ScanAWS -- "Credentials Invalid (Error)" --> LogError["Log AWS Error"]
+        LogError --> LoadGCP["Load GCP Provider"]
+        LoadGCP -- "Success" --> ScanGCP["Scan GCP"]
+        ScanGCP -- "Success" --> Report["Generate Report"]
+        Report --> End["End Scan"]
+    end
+    
+    subgraph "Final Report"
+        ReportContent["{\n  &quot;summary&quot;: {\n    &quot;successful_providers&quot;: [\"gcp\"],\n    &quot;failed_providers&quot;: [\"aws\"]\n  },\n  &quot;violations&quot;: [...]\n}"]
+    end
+
+    Report --> ReportContent
+```
+
+### 6.2. Use Case Diagram: User Experience with a Failed Provider
+
+This diagram illustrates what the user sees in the terminal when one of the configured providers fails.
+
+```mermaid
+graph LR
+    A["User runs `cloudscanner`"] --> B{"Terminal shows:<br/>`INFO: Starting discovery with 'aws' provider...`<br/>`ERROR: [aws] Failed to authenticate: The security token included in the request is invalid.`<br/>`INFO: Starting discovery with 'gcp' provider...`<br/>`INFO: [gcp] Scan complete.`"}
+    B --> C{"Final report indicates partial success"}
+```
+
+### 6.3. Sequence Diagram: Handling a Result in the Discovery Loop
+
+This sequence shows the Core Engine's logic for handling the `Result` returned by a provider plugin.
+
+```mermaid
+sequenceDiagram
+    participant CoreEngine
+    participant AWS_Plugin
+    participant GCP_Plugin
+    
+    CoreEngine->>AWS_Plugin: "discover_assets()"
+    activate AWS_Plugin
+    AWS_Plugin-->>CoreEngine: "return Err(&quot;Invalid Credentials&quot;)"
+    deactivate AWS_Plugin
+
+    CoreEngine->>CoreEngine: "Log error for AWS"
+
+    CoreEngine->>GCP_Plugin: "discover_assets()"
+    activate GCP_Plugin
+    GCP_Plugin-->>CoreEngine: "return Ok(asset_list)"
+    deactivate GCP_Plugin
+
+    CoreEngine->>CoreEngine: "Process GCP assets"
+```
+
+## 7. Reference
 
 This decision supports a core reliability requirement referenced in: [poc2.md#2.-Technical-Requirements](./poc2.md#2.-Technical-Requirements)
+

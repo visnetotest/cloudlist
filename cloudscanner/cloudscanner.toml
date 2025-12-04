@@ -1,0 +1,5 @@
+# Sample configuration for Cloud Scanner PoC2
+
+[[provider]]
+id = "aws-default"
+type = "aws"

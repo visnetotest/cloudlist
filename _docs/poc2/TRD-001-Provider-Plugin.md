@@ -1,3 +1,4 @@
+
 # TRD-001: Provider as a Plugin
 
 ## 1. Status
@@ -53,7 +54,7 @@ To create a truly robust and production-ready system, the plugin interface must 
 
 *   **Versioning:** The ABI will be explicitly versioned to prevent compatibility issues.
 *   **Task Cancellation:** Long-running tasks like discovery must be cancellable by the core engine.
-*   **Structured Data:** Moving from simple strings to structured data for actions and results makes the interface more powerful and less error-prone.
+*   **Structured Data:** Moving from simple strings to actions and results makes the interface more powerful and less error-prone.
 
 ### 5.4. Example Provider API Contract (`cloudscanner-api` crate)
 
@@ -106,21 +107,99 @@ To handle enterprise-scale environments with millions of assets, the plugin ABI 
 *   **Advantages:** This design has a minimal and constant memory footprint, regardless of the number of assets, making it highly scalable. It also allows the policy engine to evaluate assets in real-time as they are found.
 *   **Decision:** This more complex implementation is explicitly **deferred** to a post-PoC phase to ensure focus remains on delivering the core requirements.
 
-## 6. Q&A
+## 6. Questions and Mitigations
 
-**Q: How extensible should the plugin system be? Is the goal simply to have plugins, or should we require that "a developer can create a new, simple file-based provider plugin within 4 hours using a provided template"?**
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **How do we handle dependency conflicts between plugins?** (e.g., two plugins link against different versions of OpenSSL) | **Mitigation:** For the PoC, plugins will be encouraged to use pure Rust dependencies where possible. For system dependencies, this remains a risk. **Post-PoC**, the long-term solution is to explore running plugins in separate processes or using a WebAssembly (WASM) runtime, which provides a fully sandboxed environment. |
+| **What is the security model for loading dynamic plugins?** How do we prevent a malicious plugin from compromising the core engine? | **Mitigation:** For the PoC, plugins are considered trusted and must be placed in a protected, admin-controlled directory. **Post-PoC**, we will implement a code-signing requirement for plugins to be loaded, ensuring they originate from a trusted publisher. A capabilities-based security model, where plugins declare required permissions (e.g., "network access," "file system access") at load time, will also be investigated. |
+| **How will ABI versioning be managed to prevent subtle bugs?** What exactly makes an API version "compatible"? | **Mitigation:** We will use Semantic Versioning (`MAJOR.MINOR.PATCH`). Compatibility is defined as a matching `MAJOR` version. The Core Engine and a plugin must have the same major version to be considered compatible. The `PluginInfo` struct returned by the plugin will contain its ABI version, which the loader will check against its own. Any `MAJOR` version mismatch will prevent the plugin from being loaded. |
 
-**A:** This is a crucial question that defines the success criteria for the developer experience of the plugin system. For the PoC, the goal is not just to *have* plugins, but to ensure the process of creating them is straightforward and well-documented. Therefore, we will adopt the following measurable requirement:
+## 7. Diagrams
 
-**A developer must be able to create, compile, and run a new, simple provider (e.g., a file-based provider that reads assets from a local JSON file) within 4 hours, using a provided template and documentation.**
+### 7.1. System Diagram: Hybrid Plugin Model
 
-This goal forces us to create:
+This diagram shows how both statically-linked (built-in) and dynamically-loaded plugins integrate with the core engine.
 
-1.  **A high-quality provider template:** A `cargo-generate` template or a simple GitHub repository that can be cloned to provide a starting point.
-2.  **Clear documentation:** A step-by-step guide that walks a developer through the process of creating a new plugin, from setting up the project to implementing the core `Provider` trait and building the final library.
+```mermaid
+graph TD
+    subgraph "cloudscanner Binary"
+        CoreEngine["Core Engine"]
+        PluginLoader["Plugin Loader"]
+        BuiltInProvider[("Built-in AWS Provider")]
 
-By setting this concrete goal, we ensure that the plugin system is not just a technical feature, but a practical and valuable tool for the community.
+        CoreEngine -- "uses" --> PluginLoader
+        PluginLoader -- "registers" --> BuiltInProvider
+    end
 
-## 7. Reference
+    subgraph "External Files"
+        DynamicPlugin["Dynamic Azure Provider (.so)"]
+        ConfigFile["cloudscanner.toml"]
+    end
+
+    User((User)) -- "runs" --> CoreEngine
+    User -- "configures" --> ConfigFile
+
+    ConfigFile -- "informs" --> PluginLoader
+    PluginLoader -- "loads .so" --> DynamicPlugin
+```
+
+### 7.2. Component Diagram: Plugin Loader
+
+This diagram details the internal components of the Plugin Loader and its interaction with the plugin registry.
+
+```mermaid
+componentDiagram
+    package "Core Engine" {
+        ["Discovery Engine"]
+        package "Plugin Loader" {
+            ["Loader"]
+            ["Registry"]
+            ["Version Checker"]
+        }
+    }
+
+    ["Discovery Engine"] ..> ["Loader"] : "request providers"
+    ["Loader"] ..> ["Registry"] : "get registered providers"
+    ["Loader"] ..> ["Version Checker"] : "validate version"
+    ["Loader"] ..> ["Dynamic Plugin (.so)"] : "dlopen()"
+```
+
+### 7.3. Sequence Diagram: Dynamic Plugin Loading
+
+This sequence illustrates the steps the Core Engine takes to load, version-check, and initialize a dynamic provider plugin.
+
+```mermaid
+sequenceDiagram
+    participant CoreEngine
+    participant PluginLoader
+    participant DynamicPlugin as "libprovider_azure.so"
+
+    CoreEngine->>PluginLoader: "load_providers()"
+    activate PluginLoader
+
+    PluginLoader->>DynamicPlugin: "dlopen() / Load Library"
+    PluginLoader->>DynamicPlugin: "_cloudscanner_provider_info()"
+    activate DynamicPlugin
+    DynamicPlugin-->>PluginLoader: "return PluginInfo { api_version: &quot;1.0.0&quot; }"
+    deactivate DynamicPlugin
+
+    PluginLoader->>PluginLoader: "Check if engine_version matches plugin_version"
+
+    alt Version Match
+        PluginLoader->>DynamicPlugin: "_cloudscanner_provider_init()"
+        activate DynamicPlugin
+        DynamicPlugin-->>PluginLoader: "return *mut dyn Provider"
+        deactivate DynamicPlugin
+        PluginLoader->>CoreEngine: "return [AzureProvider]"
+    else Version Mismatch
+        PluginLoader-->>CoreEngine: "return error &quot;Version mismatch&quot;"
+    end
+
+    deactivate PluginLoader
+```
+
+## 8. Reference
 
 This decision is documented in the main technical specification: [CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#2.2.-Dynamic-Provider-Plugin-System](./CLOUDSCANNER_TECHNICAL_SPECIFICATION.md#2.2.-Dynamic-Provider-Plugin-System)
+

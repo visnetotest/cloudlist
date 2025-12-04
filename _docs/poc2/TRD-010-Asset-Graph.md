@@ -1,4 +1,5 @@
-# TRD-010: Asset Relationship Graph for Advanced Analysis
+
+# TRD-010: Asset Relationship Graph
 
 ## 1. Status
 
@@ -6,159 +7,86 @@
 
 ## 2. Context
 
-A traditional asset inventory provides a flat list of resources. While useful for simple checks (e.g., "find all public S3 buckets"), this model is fundamentally limited. It cannot answer complex questions about the relationships between resources, which is where the most significant cloud security risks often hide. To understand concepts like blast radius or potential attack paths, we must model the environment as it truly exists: a complex, context-rich graph of interconnected entities.
-
-This moves us from a passive, reactive inventory to a proactive **Asset Intelligence Platform**.
+Simply listing assets in isolation is insufficient for understanding actual risk. A public S3 bucket is a finding, but a public S3 bucket that can be reached from an EC2 instance that has an IAM role with access to a production database is a critical threat. To move beyond basic misconfiguration scanning and enable advanced "attack path" analysis, the system must understand not just the assets themselves, but the *relationships between them*.
 
 ## 3. Decision
 
-`cloudscanner` will construct and maintain an in-memory graph representation of the discovered cloud assets and their critical relationships. Instead of just storing a list of assets, the Discovery Engine will be responsible for identifying and recording the connections between them. This graph is the core data structure that enables advanced analysis.
+`cloudscanner` will construct and maintain an in-memory, directed graph of all discovered assets and their relationships. This Asset Relationship Graph (ARG) will be a core data structure, enabling a new class of context-aware security analysis.
 
-For the PoC, a suitable in-memory graph library from the Rust ecosystem (e.g., `petgraph`) will be used. The nodes of the graph will be the `Asset` objects, and the edges will represent the relationships.
+### 3.1. Graph Implementation
 
-### 3.1. Key Relationships to Model
+1.  **Graph Library:** The `petgraph` crate will be used for the underlying graph implementation. It is the de-facto standard in the Rust ecosystem, offering a robust and performant API for graph operations.
+2.  **Node and Edge Structure:**
+    *   **Nodes:** Each node in the graph will represent a single discovered cloud asset (e.g., an EC2 instance, an S3 bucket, an IAM user). The node will store the full `Asset` struct.
+    *   **Edges:** Edges will represent the relationship between two assets (e.g., `CONTAINS`, `IS_ATTACHED_TO`, `HAS_ACCESS_TO`).
+3.  **Graph Construction:** The Discovery Engine will be responsible for populating the graph. As assets are discovered, the provider plugins will not only return the asset but also a list of its known relationships to other assets.
 
-The initial implementation will focus on modeling high-impact relationships, such as:
+### 3.2. Graph Output and Serialization
 
-*   **Compute -> Identity:** An EC2 instance and the IAM Role it assumes.
-*   **Compute -> Network:** An EC2 instance becomes a node linked to its Security Groups and VPC.
-*   **Network -> Rules:** A Security Group and its inbound/outbound rules.
-*   **Data -> Access:** An S3 bucket and the Bucket Policy or ACLs that grant access.
-*   **Serverless -> Identity:** A Lambda function and its execution Role.
+To make the asset graph useful for analysis and visualization, the **Reporter** component must be able to serialize it into a standard format.
 
-## 4. Detailed Technical Design
+1.  **Output Format:** For the PoC, the engine must support exporting the asset graph into the **Graphviz DOT (.dot) format**. This is a widely supported, human-readable format that can be easily converted into an image for visualization.
+2.  **Control Mechanism:** A new command-line flag, **`--output-format <format>`**, will be implemented to control the output.
+    *   `--output-format json` (default): Will output the traditional list of assets.
+    *   `--output-format dot`: Will output the asset relationship graph.
 
-To implement the asset graph, we will introduce two new components within the Core Engine: the `AssetGraphBuilder` and the `GraphQueryEngine`.
+## 4. Consequences
 
-*   **AssetGraphBuilder:** This component receives the stream of `Asset` objects from the Discovery Engine. It is responsible for upserting each asset as a node in the graph and, crucially, identifying and creating the edges that represent relationships between them. For example, when it receives an EC2 instance asset, it will look for its `security_group_id` in its metadata and create an `ATTACHED_TO` edge pointing to the corresponding Security Group node.
+### 4.1. Advantages
 
-*   **GraphQueryEngine:** This component provides a high-level API for the Policy Engine and other internal components to query the graph. It abstracts the underlying graph library, allowing for queries like `find_attack_paths(source_asset, destination_asset)` or `get_blast_radius(asset, depth)`. 
+*   **Enables Advanced Analysis:** Allows for powerful graph-based queries like "Find all paths from a public-facing asset to a database."
+*   **Context-Aware Prioritization:** Moves beyond simple asset lists to provide a true understanding of risk and blast radius.
+*   **Powerful Visualization:** The graph can be easily exported and visualized to give security teams a clear map of their cloud environment.
 
-### 4.1. System Diagram
+### 4.2. Disadvantages
 
-This diagram shows how the asset graph components fit within the broader `cloudscanner` data flow.
+*   **Increased Memory Usage:** Storing the entire cloud environment as a graph can be memory-intensive for very large accounts.
+*   **Increased Complexity:** The logic for building and querying the graph is more complex than simply processing a list of assets.
+
+## 5. Questions and Mitigations
+
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **How will we manage the memory consumption for extremely large cloud environments?** | **Mitigation:** For the PoC, the graph will be held entirely in memory, which is sufficient for moderately sized environments. For a full production system, we will investigate several strategies: 1) **Graph Pruning:** Allowing users to configure rules to exclude certain low-value assets or relationships from the graph. 2) **Disk-Based Storage:** Using a lightweight, embedded graph database like `sled` to spill the graph to disk if it exceeds a certain memory threshold. |
+| **How are relationships discovered?** Does this make provider plugins much more complex? | **Mitigation:** Initially, relationship discovery will be opportunistic and focus on high-value, easy-to-identify links (e.g., an EC2 instance's attached IAM role, a security group's associated instances). The provider ABI will be extended with an optional function, `discover_relationships()`, so that only capable providers will participate in graph building. This keeps the barrier to entry low for simple providers. |
+
+## 6. Diagrams
+
+### 6.1. System Diagram: Graph Construction Flow
+
+This diagram shows how asset and relationship data flows from providers to build the graph.
 
 ```mermaid
 graph TD
-    subgraph "Discovery Phase"
-        DiscoveryEngine["Discovery Engine"] -- streams assets --> AssetGraphBuilder{"Asset Graph Builder"}
-    end
+    subgraph Provider [
+        AWS["AWS Provider"]
+    ]
+    subgraph Engine [
+        Discovery["Discovery Engine"]
+        Graph["Asset Relationship Graph"]
+    ]
 
-    subgraph "In-Memory Data"
-        AssetGraphBuilder -- builds --> AssetGraph[(In-Memory Asset Graph)]
-    end
-
-    subgraph "Analysis Phase"
-        PolicyEngine["Policy Engine"] -- queries --> GraphQueryEngine{"Graph Query Engine"}
-        GraphQueryEngine -- reads from --> AssetGraph
-    end
-
-    DiscoveryEngine --> PolicyEngine
+    AWS -- "Asset & Relationship Data" --> Discovery
+    Discovery -- "Adds Nodes & Edges" --> Graph
 ```
 
-### 4.2. Component Diagram
+### 6.2. Component Diagram: Example Asset Graph
 
-This diagram details the internal structure of the `AssetGraph` component itself.
+This diagram provides a simplified visualization of what the ARG looks like.
 
 ```mermaid
-componentDiagram
-    package "cloudscanner Core Engine" {
-        [Policy Engine] ..> [GraphQueryEngine]
+graph LR
+    IGW["Internet Gateway"] --> SG["Security Group<br/>(port 22 open)"]
+    SG --> VM["EC2 Instance"]
+    VM -- "Attached Role" --> Role["IAM Role<br/>(s3:* on prod-bucket)"]
+    Role --> S3["S3 Bucket<br/>(prod-data)"]
 
-        package "AssetGraph Component" {
-            [AssetGraphBuilder] ..> [Graph Data Structure]
-            [GraphQueryEngine] ..> [Graph Data Structure]
-
-            database "Graph Data Structure (petgraph)" {
-                [Nodes: Assets]
-                [Edges: Relationships]
-            }
-        }
-    }
+    subgraph "Attack Path"
+        direction LR
+        IGW --> VM --> S3
+    end
 ```
-
-### 4.3. Sequence Diagram: Building the Graph
-
-This diagram illustrates the step-by-step process of discovering two related assets (an EC2 Instance and its IAM Role) and adding them to the graph.
-
-```mermaid
-sequenceDiagram
-    participant Plugin as "Provider Plugin"
-    participant DiscoveryEngine as "Discovery Engine"
-    participant GraphBuilder as "AssetGraphBuilder"
-    participant Graph as "AssetGraph"
-
-    DiscoveryEngine->>Plugin: discover_assets()
-    activate Plugin
-
-    Plugin-->>DiscoveryEngine: on_asset(EC2_Instance)
-    deactivate Plugin
-    DiscoveryEngine->>GraphBuilder: process_asset(EC2_Instance)
-    activate GraphBuilder
-    GraphBuilder->>Graph: add_node(EC2_Instance)
-    GraphBuilder->>Graph: add_edge(EC2_Instance, VPC, 'MEMBER_OF')
-    deactivate GraphBuilder
-
-    activate Plugin
-    Plugin-->>DiscoveryEngine: on_asset(IAM_Role)
-    deactivate Plugin
-    DiscoveryEngine->>GraphBuilder: process_asset(IAM_Role)
-    activate GraphBuilder
-    GraphBuilder->>Graph: add_node(IAM_Role)
-
-    Note over GraphBuilder,Graph: Builder sees EC2's iam_profile matches IAM_Role's ARN.
-    GraphBuilder->>Graph: add_edge(EC2_Instance, IAM_Role, 'ASSUMES')
-    deactivate GraphBuilder
-
-```
-
-## 5. Consequences
-
-### 5.1. Advantages
-
-*   **Enables True Asset Intelligence:** This is the foundational requirement for moving beyond simple scanning to genuine asset intelligence.
-*   **Attack Path Analysis:** Allows the engine to traverse the graph to identify potential attack paths (e.g., a public-facing instance with a role that has access to a sensitive data store).
-*   **Blast Radius Calculation:** If a resource is compromised, the engine can traverse the graph outwards to determine its "blast radius"—all other resources it has access to.
-*   **Toxic Combination Detection:** Makes it possible to find dangerous combinations of permissions and network paths that are not apparent from looking at individual resources in isolation.
-
-### 5.2. Disadvantages
-
-*   **Increased Memory Usage:** Storing a graph of the entire cloud environment will be more memory-intensive than storing a simple list. This must be managed carefully, likely in conjunction with the streaming discovery model.
-*   **Discovery Complexity:** Provider plugins become more complex, as they must not only discover assets but also resolve and report their relationships.
-*   **Query Complexity:** Querying a graph is more complex than querying a flat list. A well-designed internal query API will be required.
-
-## 6. Q&A
-
-**Q: What is the definitive data schema for an "Asset"? We know it has relationships, but what are the mandatory fields every single asset, regardless of provider, must have?**
-
-**A:** This is a critical question. A stable, universal schema is essential for the Policy Engine to work reliably across different clouds. For the PoC, every `Asset` object, which represents a node in the graph, will adhere to the following baseline schema:
-
-```rust
-struct Asset {
-    // A unique, provider-agnostic identifier for the node in the graph.
-    // e.g., "aws-ec2-instance-i-1234567890abcdef0"
-    graph_id: String,
-
-    // The canonical ID of the resource from the provider.
-    // e.g., "arn:aws:ec2:us-east-1:123456789012:instance/i-1234567890abcdef0"
-    resource_id: String, 
-
-    // The type of the resource, using a standardized vocabulary.
-    // e.g., "compute:instance", "storage:bucket", "identity:role"
-    resource_type: String,
-
-    // The name of the provider plugin that discovered this asset.
-    // e.g., "aws", "gcp", "file"
-    provider: String, 
-
-    // A key-value map containing all other relevant metadata about the asset.
-    // This is where provider-specific details (tags, IP addresses, etc.) are stored.
-    metadata: HashMap<String, String>,
-}
-```
-
-This structure ensures that the core engine and policy engine can operate on a consistent data model while still allowing for rich, provider-specific details to be stored and queried when needed.
 
 ## 7. Reference
 
-This decision is a core component of the "10x Vision" and is referenced in the main proof of concept document: [poc2.md#4.2.-From-a-List-to-a-Graph:-Asset-Intelligence](./poc2.md#4.2.-From-a-List-to-a-Graph:-Asset-Intelligence)
+This decision supports a key market differentiator outlined in the MRD: [MRD2.md#4.-Key-Capabilities-&-Value-Propositions](./MRD2.md#4.-Key-Capabilities-&-Value-Propositions)

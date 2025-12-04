@@ -1,3 +1,4 @@
+
 # TRD-011: Automated Remediation Engine
 
 ## 1. Status
@@ -69,6 +70,80 @@ policies:
 *   **Expanded Permissions:** The `cloudscanner` tool will require write-level permissions in the cloud environment to perform remediations, increasing its own security profile.
 *   **Implementation Complexity:** Building a safe and reliable remediation engine is significantly more complex than a read-only scanner.
 
-## 6. Reference
+## 6. Questions and Mitigations
+
+| Question | Proposed Mitigation |
+| :--- | :--- |
+| **How do we prevent a buggy remediation from causing a major outage?** | **Mitigation:** A multi-layered safety approach: 1) **Mandatory `dry-run`:** As stated, this is the default. 2) **Scoped E2E Testing:** All remediation actions will be tested in isolated, non-production environments first (TRD-008). 3) **Limited Remediation Logic:** Remediation actions will be simple and targeted (e.g., `revoke_public_access`). Complex, multi-step remediations are explicitly out of scope for the PoC. 4) **Rollback Capability (Post-PoC):** For future versions, providers could implement a `rollback` function for each remediation, allowing the system to undo a change if it causes problems. |
+| **How are the permissions required for remediation managed securely?** | **Mitigation:** The `cloudscanner` IAM role/service account will follow the principle of least privilege. It will be granted a set of specific, limited `write` permissions required for the implemented remediation actions (e.g., `ec2:RevokeSecurityGroupIngress`, `s3:PutBucketPublicAccessBlock`). Read-only scans and remediation scans may even use two separate roles, with the more permissive remediation role only being used for runs with the `--remediate` flag. |
+| **What happens if a remediation action fails?** (e.g., due to a temporary API error) | **Mitigation:** The `remediate_asset` function in the provider plugin will return a `Result`. If an error occurs, the Remediation Engine will log the failure and, for non-critical errors, will not halt the entire scan. For event-driven remediation, the Lambda function could be configured to retry the operation a few times before sending the event to a Dead-Letter Queue (DLQ) for manual analysis. |
+
+## 7. Diagrams
+
+### 7.1. System Diagram: The Remediation Feedback Loop
+
+This diagram shows the complete "self-healing" loop, from discovery to automated remediation.
+
+```mermaid
+graph TD
+    A["Discover Assets"] --> B{"Evaluate Policies"}
+    B -- "No Violation" --> A
+    B -- "Violation Found" --> C{"Orchestrate Remediation"}
+    C -- "dry-run mode (default)" --> D["Log Proposed Action"]
+    C -- "--remediate flag" --> E["Execute Remediation"]
+    E -- "Fixes misconfiguration" --> A
+    D --> F(("User Review"))
+```
+
+### 7.2. Component Diagram: Remediation Engine
+
+This diagram details the internal components of the Remediation Engine and its interaction with other parts of `cloudscanner`.
+
+```mermaid
+componentDiagram
+    package "Core Engine" {
+        ["Policy Engine"]
+        ["Remediation Engine"]
+        ["Reporter"]
+    }
+    package "Provider Plugin" {
+        ["Remediation Executor"]
+    }
+
+    ["Policy Engine"] ..> ["Remediation Engine"] : "sends Violation"
+    ["Remediation Engine"] ..> ["Remediation Executor"] : "calls remediate_asset()"
+    ["Remediation Executor"] ..> ["Reporter"] : "sends RemediationResult"
+```
+
+### 7.3. Sequence Diagram: Remediating a Public S3 Bucket
+
+This sequence illustrates the end-to-end process of finding and fixing a policy violation, with the crucial `dry-run` check.
+
+```mermaid
+sequenceDiagram
+    participant PolicyEngine
+    participant RemediationEngine
+    participant AWS_Plugin
+    participant User
+    
+    PolicyEngine->>RemediationEngine: "Violation(S3_Bucket, PublicReadPolicy)"
+    activate RemediationEngine
+    
+    RemediationEngine->>RemediationEngine: "Check if `--remediate` flag is set"
+    alt dry-run mode (default)
+        RemediationEngine->>User: "Log: [DRY RUN] Would execute action 'block_public_access' on S3_Bucket"
+    else --remediate flag is set
+        RemediationEngine->>AWS_Plugin: "remediate_asset(S3_Bucket, { name: 'block_public_access' })"
+        activate AWS_Plugin
+        AWS_Plugin->>AWS_Plugin: "Call AWS S3 API"
+        AWS_Plugin-->>RemediationEngine: "return Success"
+        deactivate AWS_Plugin
+        RemediationEngine->>User: "Log: Successfully remediated S3_Bucket"
+    end
+    deactivate RemediationEngine
+```
+
+## 8. Reference
 
 This decision is a core component of the "10x Vision" and is referenced in the main proof of concept document: [poc2.md#4.3.-From-Reporting-to-Governing:-Automated-Remediation](./poc2.md#4.3.-From-Reporting-to-Governing:-Automated-Remediation)
+
