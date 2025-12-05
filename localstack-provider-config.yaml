@@ -1,0 +1,7 @@
+providers:
+  - name: aws
+    id: localstack
+    aws_access_key: test
+    aws_secret_key: test
+    aws_region: us-east-1
+    aws_endpoint: "http://localhost:4566"

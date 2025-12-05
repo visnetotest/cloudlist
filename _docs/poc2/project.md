@@ -99,20 +99,26 @@ This initial setup is complete and functional. The `docker-compose` configuratio
 
 1.  **Create AWS Resources:** A script is needed to create dummy AWS resources (e.g., EC2 instances, S3 buckets) in the Localstack container after it starts. This will provide assets for `cloudlist` to discover.
 2.  **Verify Discovery:** Once resources are created, re-run the test to confirm that `cloudlist` successfully discovers and lists them.
-3.  **Expand Service Coverage:** Add more AWS services to the `SERVICES` environment variable in the `docker-compose` file and create corresponding resources to test a wider range of `cloudlist`'s capabilities.
+3.  **Expand Service Coverage:** Add more AWS services to the `SERVICES` environment variable in the `docker-compose` file and create corresponding resources to test a wider range of `cloudlist`'''s capabilities.
 
 ## 6. Technical Decision Records (TRDs)
 
 Detailed architectural and design decisions are captured in the following Technical Decision Records (TRDs), located in this directory:
 
-*   [TRD-001-Provider-Plugin-ABI.md](./TRD-001-Provider-Plugin-ABI.md)
+*   [TRD-001-Provider-Plugin.md](./TRD-001-Provider-Plugin.md)
 *   [TRD-002-Language-Choice.md](./TRD-002-Language-Choice.md)
 *   [TRD-003-Unified-Engine.md](./TRD-003-Unified-Engine.md)
 *   [TRD-004-Policy-Engine.md](./TRD-004-Policy-Engine.md)
 *   [TRD-005-Configuration.md](./TRD-005-Configuration.md)
+*   [TRD-008-Measurable-Testing-Strategy.md](./TRD-008-Measurable-Testing-Strategy.md)
 *   [TRD-009-Event-Driven-Discovery.md](./TRD-009-Event-Driven-Discovery.md)
 *   [TRD-010-Asset-Graph.md](./TRD-010-Asset-Graph.md)
-*   [TRD-008-Measurable-Testing-Strategy.md](./TRD-008-Measurable-Testing-Strategy.md)
+*   [TRD-011-Automated-Remediation.md](./TRD-011-Automated-Remediation.md)
+*   [TRD-012-Progress-Indication.md](./TRD-012-Progress-Indication.md)
+*   [TRD-013-Verbosity-Control.md](./TRD-013-Verbosity-Control.md)
+*   [TRD-014-Graceful-Failure-Handling.md](./TRD-014-Graceful-Failure-Handling.md)
+*   [TRD-015-Secure-Credential-Management.md](./TRD-015-Secure-Credential-Management.md)
+*   [TRD-016-Self-Contained-PoC-Artifacts.md](./TRD-016-Self-Contained-PoC-Artifacts.md)
 *   [TRD-017-AWS-S3-Provider-Plugin.md](./TRD-017-AWS-S3-Provider-Plugin.md)
 *   [TRD-018-YAML-Policy-for-Public-S3.md](./TRD-018-YAML-Policy-for-Public-S3.md)
 

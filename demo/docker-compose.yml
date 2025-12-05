@@ -2,54 +2,58 @@ version: '3.8'
 
 services:
   localstack:
-    image: localstack/localstack:3.0
+    image: localstack/localstack:latest
     ports:
       - "4566:4566" # Main endpoint for all services
+    healthcheck:
+      test: ["CMD", "awslocal", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
-      - SERVICES=s3,ec2
       - DEBUG=1
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
 
   aws-setup:
     image: amazon/aws-cli:2.13.29
     depends_on:
-      - localstack
+      localstack:
+        condition: service_healthy # Wait for the healthcheck to pass
     volumes:
       - ./aws-setup.sh:/aws-setup.sh
     environment:
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
       - AWS_DEFAULT_REGION=us-east-1
+      # This is crucial: override the AWS endpoint to point to LocalStack
+      - AWS_ENDPOINT_URL=http://localstack:4566
     entrypoint: /bin/sh
-    command: >
-      -c "
-        apk add --no-cache curl
-        # Wait for LocalStack to be ready
-        echo 'Waiting for LocalStack...' 
-        while ! curl -s http://localstack:4566/_localstack/health | grep '"s3": "running"' > /dev/null; do 
-          sleep 2 
-        done 
-        echo 'LocalStack is ready. Running setup script.'
-        /aws-setup.sh
-      "
+    command: /aws-setup.sh
 
   cloudlist:
     build:
-      context: ..
+      context: ..  # Corrected: Go up one directory to the project root
       dockerfile: Dockerfile
     depends_on:
-      - aws-setup
+      aws-setup:
+        condition: service_completed_successfully
     volumes:
-      - ./provider-config.yaml:/app/demo/provider-config.yaml
-      - ./policy.yaml:/app/demo/policy.yaml
+      - ./provider-config.yaml:/app/provider-config.yaml
     command: >
-      -c "
-        ./cloudlist \
-          -p aws \
-          -pc /app/demo/provider-config.yaml \
-          -pf /app/demo/policy.yaml \
-          -pb
-      "
-    entrypoint: /bin/sh
+      /app/cloudlist 
+      -pc /app/provider-config.yaml 
+      -p aws -json
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      # This is crucial: override the AWS endpoint to point to LocalStack
+      - AWS_ENDPOINT_URL=http://localstack:4566
+
+volumes:
+  localstack_data:

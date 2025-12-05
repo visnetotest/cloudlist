@@ -1,34 +1,31 @@
-# Use the official Golang image to create a build artifact.
-FROM golang:1.24-alpine as builder
+# Use the official Golang image to build the application
+FROM golang:1.24-alpine AS builder
 
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy go.mod and go.sum files to leverage Docker cache
+# Copy the go.mod and go.sum files to download dependencies
 COPY go.mod go.sum ./
 
-# Download dependencies
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
-# Copy the rest of the application source code
+# Copy the source code into the container
 COPY . .
 
-# Build the cloudlist binary
-RUN go build -v -o cloudlist cmd/cloudlist/main.go
+# Build the application for a static, linux-native binary
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o /app/cloudlist cmd/cloudlist/main.go
 
-# ---
-
-# The final image is lightweight
+# --- Final Stage ---
+# Use a minimal, non-root image for the final container
 FROM alpine:latest
 
+# Set the working directory
 WORKDIR /app
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/cloudlist .
-COPY --from=builder /app/demo/ ./demo/
 
-# Grant execution permissions
-RUN chmod +x cloudlist
-
-# The default command will be to run the application,
-# but it will be overridden in the docker-compose file.
-CMD ["./cloudlist"]
+# The 'command' in docker-compose.yml will override this, but it's good practice
+# to define a default entrypoint.
+ENTRYPOINT ["/app/cloudlist"]

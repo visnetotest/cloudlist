@@ -1,4 +1,3 @@
-
 # TRD-008: Measurable Testing Strategy
 
 ## 1. Status
@@ -125,3 +124,7 @@ componentDiagram
 ## 7. Reference
 
 This TRD provides the concrete, measurable goals for the high-level requirement defined in: [poc2.md#3.-Technical-Requirements](./poc2.md#3.-Technical-Requirements) (TR-8).
+
+Create AWS Resources: A script is needed to create dummy AWS resources (e.g., EC2 instances, S3 buckets) in the Localstack container after it starts. This will provide assets for cloudlist to discover.
+Verify Discovery: Once resources are created, re-run the test to confirm that cloudlist successfully discovers and lists them.
+Expand Service Coverage: Add more AWS services to the SERVICES environment variable in the docker-compose file and create corresponding resources to test a wider range of cloudlist’s capabilities.

@@ -1,0 +1,8 @@
+[workspace]
+
+members = [
+    "cloudscanner",
+    "cloudscanner-provider-dummy",
+]
+
+resolver = "2"
