@@ -1,0 +1,11 @@
+[[provider]]
+id = "aws-localstack-plugin-test"
+type = "plugin"
+plugin_path = "plugins/libcloudscanner_provider_aws.dylib"
+[provider.config]
+region = "us-east-1"
+endpoint_url = "http://localhost:4566"
+services = [
+    { name = "ec2", enabled = true },
+    { name = "s3", enabled = true }
+]

@@ -1,0 +1,9 @@
+name: "EC2 Instances with Unencrypted Volumes"
+description: "Detect EC2 instances with unattached EBS volumes"
+resource_type: "ec2-instance"
+conditions:
+  - field: "ebs_encrypted"
+    operator: "equals"
+    value: false
+severity: "medium"
+remediation: "Enable encryption for EBS volumes"

@@ -1,0 +1,13 @@
+[package]
+name = "cloudscanner-provider-dummy"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cloudscanner = { path = "../cloudscanner" }
+async-trait = "0.1"
+anyhow = "1.0"
+tokio = { version = "1", features = ["time"] }

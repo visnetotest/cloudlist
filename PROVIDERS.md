@@ -32,8 +32,24 @@ Amazon Web Services can be integrated by using the following configuration block
 `aws_access_key` and `aws_secret_key` can be generated in the IAM console. We recommend creating a new IAM user with `Read Only` permissions and providing the access token for the user.
 
 Scopes Required - 
-1. EC2
-2. Route53
+1. EC2 - For EC2 instances, VPCs, subnets, security groups, NAT gateways, and network interfaces
+2. Route53 - For hosted zones and DNS records
+3. Lambda - For Lambda functions and their configurations
+4. RDS - For RDS database instances and clusters
+5. ECS - For ECS clusters, services, and task definitions
+6. EKS - For EKS clusters and node groups
+7. IAM - For IAM roles, policies, and instance profiles
+8. CloudTrail - For trail configurations and logging status
+9. CloudWatch - For alarms, metrics, and log groups
+10. ELB - For Application, Network, and Classic Load Balancers
+11. S3 - For S3 buckets (existing)
+12. API Gateway - For REST, WebSocket, and HTTP APIs with stages, methods, and integrations
+13. SQS - For Simple Queue Service queues, attributes, and dead-letter configurations
+14. SNS - For Simple Notification Service topics, subscriptions, and push notifications
+15. ElastiCache - For Redis/Memcached clusters, replication groups, and cache nodes
+16. Redshift - For data warehouse clusters, endpoints, and database configurations
+17. CloudFront - For CDN distributions, cache behaviors, and edge locations
+18. Lightsail - For virtual private servers, containers, and managed databases
 
 References - 
 1. https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_examples_iam_read-only-console.html

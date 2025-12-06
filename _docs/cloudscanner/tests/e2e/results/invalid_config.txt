@@ -1,0 +1,3 @@
+[2m2025-12-06T01:00:35.362302Z[0m [32m INFO[0m Cloud Scanner PoC2: Initializing...
+[2m2025-12-06T01:00:35.362358Z[0m [32m INFO[0m Loading configuration from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/results/invalid.toml
+[2m2025-12-06T01:00:35.362430Z[0m [31mERROR[0m Failed to load configuration from /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/results/invalid.toml: Failed to parse config TOML: expected an equals, found an identifier at line 1 column 9

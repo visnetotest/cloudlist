@@ -1,0 +1,8 @@
+name: "EC2 Instances with Public IP"
+description: "Detect EC2 instances that have public IP addresses"
+resource_type: "ec2-instance"
+conditions:
+  - field: "public_ip"
+    operator: "exists"
+severity: "low"
+remediation: "Review if public IP is necessary for this instance"

@@ -1,0 +1,4 @@
+Error: Failed to parse config TOML: expected an equals, found an identifier at line 1 column 9
+
+Caused by:
+    expected an equals, found an identifier at line 1 column 9

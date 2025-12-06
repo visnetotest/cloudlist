@@ -1,0 +1,28 @@
+[2m2025-12-06T01:00:35.153837Z[0m [32m INFO[0m Cloud Scanner PoC2: Initializing...
+[2m2025-12-06T01:00:35.153890Z[0m [32m INFO[0m Loading configuration from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/configs/aws_ec2_test.toml
+[2m2025-12-06T01:00:35.154205Z[0m [32m INFO[0m Successfully loaded configuration with 1 providers
+[2m2025-12-06T01:00:35.154210Z[0m [32m INFO[0m Configuration loaded from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/configs/aws_ec2_test.toml
+[2m2025-12-06T01:00:35.154213Z[0m [32m INFO[0m Loading providers from: plugins
+[2m2025-12-06T01:00:35.154216Z[0m [33m WARN[0m Plugin directory does not exist: plugins
+[2m2025-12-06T01:00:35.154225Z[0m [32m INFO[0m Loading policies from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies
+[2m2025-12-06T01:00:35.154323Z[0m [31mERROR[0m Failed to load policy "/Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies/ec2_unencrypted_volumes.yaml": missing field `asset_type` at line 1 column 5
+[2m2025-12-06T01:00:35.154350Z[0m [31mERROR[0m Failed to load policy "/Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies/public_s3_buckets.yaml": missing field `asset_type` at line 1 column 5
+[2m2025-12-06T01:00:35.154372Z[0m [31mERROR[0m Failed to load policy "/Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies/unencrypted_s3_buckets.yaml": missing field `asset_type` at line 1 column 5
+[2m2025-12-06T01:00:35.154394Z[0m [31mERROR[0m Failed to load policy "/Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies/ec2_public_ip.yaml": missing field `asset_type` at line 1 column 5
+[2m2025-12-06T01:00:35.154398Z[0m [32m INFO[0m Successfully loaded 0 policies from /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies
+[2m2025-12-06T01:00:35.154400Z[0m [32m INFO[0m Starting discovery process...
+[2m2025-12-06T01:00:35.154402Z[0m [32m INFO[0m Discovery engine running with 0 providers
+[2m2025-12-06T01:00:35.154403Z[0m [32m INFO[0m Discovery complete. Total resources: 0
+[2m2025-12-06T01:00:35.154405Z[0m [32m INFO[0m Discovered 0 total resources
+[2m2025-12-06T01:00:35.154407Z[0m [32m INFO[0m Starting policy evaluation...
+[2m2025-12-06T01:00:35.154408Z[0m [32m INFO[0m Policy engine evaluating 0 resources against 0 policies...
+[2m2025-12-06T01:00:35.154410Z[0m [32m INFO[0m Policy evaluation complete: no violations detected
+[2m2025-12-06T01:00:35.154411Z[0m [32m INFO[0m Generating report...
+[2m2025-12-06T01:00:35.154413Z[0m [32m INFO[0m Generating report with 0 resources
+{
+  "timestamp": "2025-12-06T01:00:35.154418+00:00",
+  "total_resources": 0,
+  "resources_by_type": {},
+  "resources": []
+}
+[2m2025-12-06T01:00:35.154425Z[0m [32m INFO[0m Cloud Scanner run complete.

@@ -1,0 +1,13 @@
+[[provider]]
+id = "aws-provider-1"
+type = "aws"
+[provider.config]
+region = "us-east-1"
+services = [
+    { name = "ec2", enabled = true },
+    { name = "s3", enabled = true }
+]
+
+[[provider]]
+id = "dummy-provider-1"
+type = "dummy"

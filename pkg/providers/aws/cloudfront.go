@@ -4,187 +4,318 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudfront"
-	"github.com/pkg/errors"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	"github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	"github.com/projectdiscovery/cloudlist/pkg/schema"
 )
 
-// cloudfrontProvider is a provider for AWS CloudFront API
+// cloudfrontProvider is an instance of the AWS CloudFront provider
 type cloudfrontProvider struct {
-	options          ProviderOptions
-	cloudFrontClient *cloudfront.CloudFront
-	session          *session.Session
+	provider *awsProvider
 }
 
-func (cp *cloudfrontProvider) name() string {
+// newCloudFrontProvider returns a new CloudFront provider
+func newCloudFrontProvider(p *awsProvider) (*cloudfrontProvider, error) {
+	return &cloudfrontProvider{provider: p}, nil
+}
+
+// Name returns the name of the service provider
+func (p *cloudfrontProvider) Name() string {
 	return "cloudfront"
 }
 
-// GetResource returns all the resources in the store for a provider.
-func (cp *cloudfrontProvider) GetResource(ctx context.Context) (*schema.Resources, error) {
-	list := schema.NewResources()
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	for _, client := range cp.getCloudfrontClients() {
-		wg.Add(1)
-
-		go func(cloudfrontClient *cloudfront.CloudFront) {
-			defer wg.Done()
-
-			if resources, err := cp.listCloudFrontResources(cloudfrontClient); err == nil {
-				mu.Lock()
-				list.Merge(resources)
-				mu.Unlock()
-			}
-		}(client)
-	}
-	wg.Wait()
-	return list, nil
+// ID returns the unique identifier of the service provider
+func (p *cloudfrontProvider) ID() string {
+	return "cloudfront"
 }
 
-func (cp *cloudfrontProvider) listCloudFrontResources(cloudFrontClient *cloudfront.CloudFront) (*schema.Resources, error) {
-	list := schema.NewResources()
-	req := &cloudfront.ListDistributionsInput{MaxItems: aws.Int64(400)}
-	for {
-		distributions, err := cloudFrontClient.ListDistributions(req)
+// Services returns the list of services offered by the provider
+func (p *cloudfrontProvider) Services() []string {
+	return []string{"cloudfront"}
+}
+
+// Resources returns the resources as a schema.Resources object
+func (p *cloudfrontProvider) Resources(ctx context.Context) (*schema.Resources, error) {
+	resources := schema.NewResources()
+
+	// Get CloudFront client
+	client, err := p.provider.getClient()
+	if err != nil {
+		return nil, fmt.Errorf("could not get CloudFront client: %w", err)
+	}
+
+	cloudfrontClient := cloudfront.NewFromConfig(client)
+
+	// Get all distributions
+	distributions, err := p.getDistributions(ctx, cloudfrontClient)
+	if err != nil {
+		return nil, fmt.Errorf("could not get CloudFront distributions: %w", err)
+	}
+	resources.Merge(distributions)
+
+	// Get all functions
+	functions, err := p.getFunctions(ctx, cloudfrontClient)
+	if err != nil {
+		return nil, fmt.Errorf("could not get CloudFront functions: %w", err)
+	}
+	resources.Merge(functions)
+
+	// Get all origin access identities
+	originAccessIdentities, err := p.getOriginAccessIdentities(ctx, cloudfrontClient)
+	if err != nil {
+		return nil, fmt.Errorf("could not get CloudFront origin access identities: %w", err)
+	}
+	resources.Merge(originAccessIdentities)
+
+	return resources, nil
+}
+
+// getDistributions retrieves all CloudFront distributions
+func (p *cloudfrontProvider) getDistributions(ctx context.Context, client *cloudfront.Client) (*schema.Resources, error) {
+	resources := schema.NewResources()
+
+	input := &cloudfront.ListDistributionsInput{
+		MaxItems: aws.Int64(100),
+	}
+
+	paginator := cloudfront.NewListDistributionsPaginator(client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not list distributions")
+			return nil, err
 		}
 
-		for _, distribution := range distributions.DistributionList.Items {
-			// Extract metadata for this distribution
-			var metadata map[string]string
-			if cp.options.ExtendedMetadata {
-				metadata = cp.getDistributionMetadata(distribution, cloudFrontClient)
-			}
-
+		for _, distribution := range page.DistributionList.Items {
+			// Extract distribution information
 			resource := &schema.Resource{
-				Provider: "aws",
-				ID:       aws.StringValue(distribution.Id),
-				DNSName:  aws.StringValue(distribution.DomainName),
+				ID:       fmt.Sprintf("cloudfront-distribution-%s", aws.ToString(distribution.Id)),
 				Public:   true,
-				Service:  cp.name(),
-				Metadata: metadata,
+				Provider: "aws",
+				Service:  "cloudfront",
+				DNSName:  p.extractDomainName(distribution),
+				Metadata: map[string]string{
+					"distribution_id":    aws.ToString(distribution.Id),
+					"domain_name":        p.extractDomainName(distribution),
+					"status":             aws.ToString(distribution.Status),
+					"enabled":            fmt.Sprintf("%v", aws.ToBool(distribution.Enabled)),
+					"price_class":        aws.ToString(distribution.PriceClass),
+					"web_acl_id":         aws.ToString(distribution.WebACLId),
+					"http_version":       aws.ToString(distribution.HttpVersion),
+					"is_ipv6_enabled":    fmt.Sprintf("%v", aws.ToBool(distribution.IsIPV6Enabled)),
+					"last_modified_time": aws.ToString(distribution.LastModifiedTime),
+					"comment":            aws.ToString(distribution.Comment),
+					"aliases":            strings.Join(distribution.Aliases.Items, ","),
+				},
 			}
-			list.Append(resource)
+
+			// Add default cache behavior information
+			if len(distribution.DefaultCacheBehavior) > 0 {
+				defaultBehavior := distribution.DefaultCacheBehavior[0]
+				resource.Metadata["default_cache_behavior"] = fmt.Sprintf("PathPattern=%s, TargetOriginId=%s, ViewerProtocolPolicy=%s, MinTTL=%d, MaxTTL=%d, Compress=%v, ForwardedValues=%v",
+					aws.ToString(defaultBehavior.PathPattern),
+					aws.ToString(defaultBehavior.TargetOriginId),
+					aws.ToString(defaultBehavior.ViewerProtocolPolicy),
+					aws.ToInt32(defaultBehavior.MinTTL),
+					aws.ToInt32(defaultBehavior.MaxTTL),
+					aws.ToBool(defaultBehavior.Compress),
+					strings.Join(defaultBehavior.ForwardedValues.Items, ","),
+				)
+			}
+
+			// Add logging information
+			if distribution.Logging != nil {
+				resource.Metadata["logging_enabled"] = fmt.Sprintf("%v", aws.ToBool(distribution.Logging.Enabled))
+				resource.Metadata["log_bucket"] = aws.ToString(distribution.Logging.Bucket)
+				resource.Metadata["log_prefix"] = aws.ToString(distribution.Logging.Prefix)
+				resource.Metadata["log_include_cookies"] = aws.ToString(distribution.Logging.IncludeCookies)
+			}
+
+			// Add viewer certificate information
+			if distribution.ViewerCertificate != nil {
+				resource.Metadata["certificate_type"] = aws.ToString(distribution.ViewerCertificate.CertificateType)
+				resource.Metadata["certificate_source"] = aws.ToString(distribution.ViewerCertificate.CertificateSource)
+				resource.Metadata["certificate_protocol"] = aws.ToString(distribution.ViewerCertificate.CertificateProtocol)
+				resource.Metadata["ssl_protocol"] = aws.ToString(distribution.ViewerCertificate.SSLSupportMethod)
+				resource.Metadata["minimum_protocol_version"] = aws.ToString(distribution.ViewerCertificate.MinimumProtocolVersion)
+			}
+
+			// Add origin information
+			if len(distribution.Origins.Items) > 0 {
+				var origins []string
+				for _, origin := range distribution.Origins.Items {
+					if origin.DomainName != nil {
+						origins = append(origins, fmt.Sprintf("%s:%s", aws.ToString(origin.DomainName), aws.ToString(origin.Id)))
+					}
+				}
+				resource.Metadata["origins"] = strings.Join(origins, ",")
+			}
+
+			// Add cache behaviors
+			if len(distribution.CacheBehaviors.Items) > 0 {
+				var behaviors []string
+				for _, behavior := range distribution.CacheBehaviors.Items {
+					behaviors = append(behaviors, fmt.Sprintf("PathPattern=%s, TargetOriginId=%s", aws.ToString(behavior.PathPattern), aws.ToString(behavior.TargetOriginId)))
+				}
+				resource.Metadata["cache_behaviors"] = strings.Join(behaviors, ",")
+			}
+
+			// Add custom error responses
+			if distribution.CustomErrorResponses != nil {
+				var errorResponses []string
+				for _, errorResponse := range distribution.CustomErrorResponses.Items {
+					errorResponses = append(errorResponses, fmt.Sprintf("ErrorCode=%s, ResponsePagePath=%s, ResponseCode=%s, ErrorCachingMinTTL=%d",
+						aws.ToInt32(errorResponse.ErrorCode),
+						aws.ToString(errorResponse.ResponsePagePath),
+						aws.ToInt32(errorResponse.ResponseCode),
+						aws.ToInt32(errorResponse.ErrorCachingMinTTL)))
+				}
+				resource.Metadata["custom_error_responses"] = strings.Join(errorResponses, ",")
+			}
+
+			// Add restrictions
+			if distribution.Restrictions != nil {
+				var geoRestrictions []string
+				if distribution.Restrictions.GeoRestriction != nil {
+					for _, restriction := range distribution.Restrictions.GeoRestriction.Restrictions {
+						geoRestrictions = append(geoRestrictions, fmt.Sprintf("%s:%s", aws.ToString(restriction.RestrictionType), strings.Join(restriction.Restriction.Items.Items, ",")))
+					}
+				}
+				resource.Metadata["geo_restrictions"] = strings.Join(geoRestrictions, ",")
+			}
+
+			resources.Append(resource)
 		}
-		if aws.StringValue(distributions.DistributionList.NextMarker) == "" {
-			break
-		}
-		req.SetMarker(aws.StringValue(distributions.DistributionList.NextMarker))
 	}
-	return list, nil
+
+	return resources, nil
 }
 
-func (cp *cloudfrontProvider) getDistributionMetadata(distribution *cloudfront.DistributionSummary, cloudFrontClient *cloudfront.CloudFront) map[string]string {
-	metadata := make(map[string]string)
+// getFunctions retrieves all CloudFront functions
+func (p *cloudfrontProvider) getFunctions(ctx context.Context, client *cloudfront.Client) (*schema.Resources, error) {
+	resources := schema.NewResources()
 
-	schema.AddMetadata(metadata, "distribution_id", distribution.Id)
-	schema.AddMetadata(metadata, "status", distribution.Status)
-	schema.AddMetadata(metadata, "domain_name", distribution.DomainName)
-	schema.AddMetadata(metadata, "comment", distribution.Comment)
-	schema.AddMetadata(metadata, "http_version", distribution.HttpVersion)
-	schema.AddMetadata(metadata, "price_class", distribution.PriceClass)
-	schema.AddMetadata(metadata, "web_acl_id", distribution.WebACLId)
-
-	if distribution.ARN != nil {
-		arn := aws.StringValue(distribution.ARN)
-		metadata["arn"] = arn
-
-		if arnComponents := parseARN(arn); arnComponents != nil && arnComponents.AccountID != "" {
-			metadata["owner_id"] = arnComponents.AccountID
-		}
+	input := &cloudfront.ListFunctions2020_09_07Input{
+		MaxItems: aws.Int64(100),
 	}
 
-	if distribution.LastModifiedTime != nil {
-		metadata["last_modified"] = distribution.LastModifiedTime.Format(time.RFC3339)
-	}
-
-	if distribution.Enabled != nil {
-		metadata["enabled"] = fmt.Sprintf("%v", aws.BoolValue(distribution.Enabled))
-	}
-
-	if distribution.IsIPV6Enabled != nil {
-		metadata["ipv6_enabled"] = fmt.Sprintf("%v", aws.BoolValue(distribution.IsIPV6Enabled))
-	}
-
-	if distribution.Aliases != nil && distribution.Aliases.Items != nil && len(distribution.Aliases.Items) > 0 {
-		var aliases []string
-		for _, alias := range distribution.Aliases.Items {
-			if alias != nil {
-				aliases = append(aliases, aws.StringValue(alias))
-			}
-		}
-		if len(aliases) > 0 {
-			metadata["aliases"] = strings.Join(aliases, ",")
-		}
-	}
-
-	if distribution.Origins != nil && distribution.Origins.Items != nil && len(distribution.Origins.Items) > 0 {
-		var origins []string
-		for _, origin := range distribution.Origins.Items {
-			if origin.DomainName != nil {
-				origins = append(origins, aws.StringValue(origin.DomainName))
-			}
-		}
-		if len(origins) > 0 {
-			metadata["origins"] = strings.Join(origins, ",")
-		}
-		schema.AddMetadataInt(metadata, "origins_count", len(distribution.Origins.Items))
-	}
-
-	if distribution.Id != nil {
-		if tagOutput, err := cloudFrontClient.ListTagsForResource(&cloudfront.ListTagsForResourceInput{
-			Resource: distribution.ARN,
-		}); err == nil && tagOutput.Tags != nil && tagOutput.Tags.Items != nil {
-			if tagString := buildCloudFrontTagString(tagOutput.Tags.Items); tagString != "" {
-				metadata["tags"] = tagString
-			}
-		}
-	}
-
-	return metadata
-}
-
-func (cp *cloudfrontProvider) getCloudfrontClients() []*cloudfront.CloudFront {
-	cloudfrontClients := make([]*cloudfront.CloudFront, 0)
-	cloudfrontClients = append(cloudfrontClients, cp.cloudFrontClient)
-
-	if cp.options.AssumeRoleName == "" || len(cp.options.AccountIds) < 1 {
-		return cloudfrontClients
-	}
-
-	for _, accountId := range cp.options.AccountIds {
-		roleARN := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, cp.options.AssumeRoleName)
-		creds := stscreds.NewCredentials(cp.session, roleARN)
-
-		assumeSession, err := session.NewSession(&aws.Config{
-			Region:      aws.String("us-east-1"),
-			Credentials: creds,
-		})
+	paginator := cloudfront.NewListFunctions2020_09_07Paginator(client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			continue
+			return nil, err
 		}
 
-		cloudfrontClients = append(cloudfrontClients, cloudfront.New(assumeSession))
+		for _, function := range page.FunctionList.Items {
+			// Extract function information
+			resource := &schema.Resource{
+				ID:       fmt.Sprintf("cloudfront-function-%s", aws.ToString(function.Name)),
+				Public:   true,
+				Provider: "aws",
+				Service:  "cloudfront",
+				DNSName:  aws.ToString(function.Name),
+				Metadata: map[string]string{
+					"function_name":      aws.ToString(function.Name),
+					"function_arn":       aws.ToString(function.FunctionARN),
+					"status":             aws.ToString(function.Status),
+					"runtime":            aws.ToString(function.Runtime),
+					"memory_size":        fmt.Sprintf("%d", aws.ToInt32(function.MemorySize)),
+					"code_size":          fmt.Sprintf("%d", aws.ToInt32(function.CodeSize)),
+					"comment":            aws.ToString(function.Comment),
+					"last_modified_time": aws.ToString(function.LastModifiedTime),
+				},
+			}
+
+			// Add environment variables
+			if len(function.Environment.Variables) > 0 {
+				var envVars []string
+				for _, envVar := range function.Environment.Variables {
+					envVars = append(envVars, fmt.Sprintf("%s=%s", aws.ToString(envVar.Key), aws.ToString(envVar.Value)))
+				}
+				resource.Metadata["environment_variables"] = strings.Join(envVars, ",")
+			}
+
+			// Add function associations
+			if len(function.FunctionAssociations.Items) > 0 {
+				var associations []string
+				for _, association := range function.FunctionAssociations.Items {
+					associations = append(associations, fmt.Sprintf("Event=%s, FunctionARN=%s",
+						aws.ToString(association.EventType),
+						aws.ToString(association.FunctionARN)))
+				}
+				resource.Metadata["function_associations"] = strings.Join(associations, ",")
+			}
+
+			resources.Append(resource)
+		}
 	}
-	return cloudfrontClients
+
+	return resources, nil
 }
 
-func buildCloudFrontTagString(tags []*cloudfront.Tag) string {
-	var tagPairs []string
-	for _, tag := range tags {
-		if tag.Key != nil && tag.Value != nil {
-			tagPairs = append(tagPairs, fmt.Sprintf("%s=%s",
-				aws.StringValue(tag.Key), aws.StringValue(tag.Value)))
+// getOriginAccessIdentities retrieves all CloudFront origin access identities
+func (p *cloudfrontProvider) getOriginAccessIdentities(ctx context.Context, client *cloudfront.Client) (*schema.Resources, error) {
+	resources := schema.NewResources()
+
+	input := &cloudfront.ListOriginAccessIdentitiesInput{
+		MaxItems: aws.Int64(100),
+	}
+
+	paginator := cloudfront.NewListOriginAccessIdentitiesPaginator(client, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, identity := range page.OriginAccessIdentityList.Items {
+			// Extract identity information
+			resource := &schema.Resource{
+				ID:       fmt.Sprintf("cloudfront-origin-access-identity-%s", aws.ToString(identity.Id)),
+				Public:   true,
+				Provider: "aws",
+				Service:  "cloudfront",
+				DNSName:  aws.ToString(identity.Id),
+				Metadata: map[string]string{
+					"identity_id":      aws.ToString(identity.Id),
+					"description":      aws.ToString(identity.Description),
+					"iam_arn":          aws.ToString(identity.IamArn),
+					"caller_reference": aws.ToString(identity.CallerReference),
+					"paths":            strings.Join(identity.Paths.Items, ","),
+				},
+			}
+
+			// Add signers information
+			if len(identity.Signers.Items) > 0 {
+				var signers []string
+				for _, signer := range identity.Signers.Items {
+					signers = append(signers, fmt.Sprintf("%s:%s", aws.ToString(signer.AwsAccountNumber), aws.ToString(signer.SignerName)))
+				}
+				resource.Metadata["signers"] = strings.Join(signers, ",")
+			}
+
+			resources.Append(resource)
 		}
 	}
-	return strings.Join(tagPairs, ",")
+
+	return resources, nil
+}
+
+// extractDomainName extracts the domain name from a CloudFront distribution
+func (p *cloudfrontProvider) extractDomainName(distribution *types.Distribution) string {
+	if distribution.DomainName != nil {
+		return aws.ToString(distribution.DomainName)
+	}
+
+	// Try to extract domain from aliases
+	if len(distribution.Aliases.Items) > 0 {
+		for _, alias := range distribution.Aliases.Items {
+			if alias.Alias != nil {
+				return aws.ToString(alias.Alias)
+			}
+		}
+	}
+
+	return ""
 }

@@ -1,0 +1,3 @@
+[2m2025-12-06T01:00:35.367530Z[0m [32m INFO[0m Cloud Scanner PoC2: Initializing...
+[2m2025-12-06T01:00:35.367575Z[0m [32m INFO[0m Loading configuration from: /nonexistent/config.toml
+[2m2025-12-06T01:00:35.367586Z[0m [31mERROR[0m Failed to load configuration from /nonexistent/config.toml: Config file not found: /nonexistent/config.toml

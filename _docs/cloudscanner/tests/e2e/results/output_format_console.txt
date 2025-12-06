@@ -1,0 +1,24 @@
+[2m2025-12-06T01:00:35.235224Z[0m [32m INFO[0m Cloud Scanner PoC2: Initializing...
+[2m2025-12-06T01:00:35.235258Z[0m [32m INFO[0m Loading configuration from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/configs/aws_s3_test.toml
+[2m2025-12-06T01:00:35.235337Z[0m [32m INFO[0m Successfully loaded configuration with 1 providers
+[2m2025-12-06T01:00:35.235340Z[0m [32m INFO[0m Configuration loaded from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/configs/aws_s3_test.toml
+[2m2025-12-06T01:00:35.235343Z[0m [32m INFO[0m Loading providers from: plugins
+[2m2025-12-06T01:00:35.235346Z[0m [33m WARN[0m Plugin directory does not exist: plugins
+[2m2025-12-06T01:00:35.235353Z[0m [32m INFO[0m Loading policies from: policies
+[2m2025-12-06T01:00:35.235359Z[0m [33m WARN[0m Policy directory does not exist: policies
+[2m2025-12-06T01:00:35.235361Z[0m [32m INFO[0m Starting discovery process...
+[2m2025-12-06T01:00:35.235363Z[0m [32m INFO[0m Discovery engine running with 0 providers
+[2m2025-12-06T01:00:35.235364Z[0m [32m INFO[0m Discovery complete. Total resources: 0
+[2m2025-12-06T01:00:35.235366Z[0m [32m INFO[0m Discovered 0 total resources
+[2m2025-12-06T01:00:35.235367Z[0m [32m INFO[0m Starting policy evaluation...
+[2m2025-12-06T01:00:35.235369Z[0m [32m INFO[0m Policy engine evaluating 0 resources against 0 policies...
+[2m2025-12-06T01:00:35.235371Z[0m [32m INFO[0m Policy evaluation complete: no violations detected
+[2m2025-12-06T01:00:35.235372Z[0m [32m INFO[0m Generating report...
+[2m2025-12-06T01:00:35.235373Z[0m [32m INFO[0m Generating report with 0 resources
+
+=== Cloud Scanner Report ===
+Timestamp: 2025-12-06T01:00:35.235377+00:00
+Total Resources: 0
+============================
+
+[2m2025-12-06T01:00:35.235388Z[0m [32m INFO[0m Cloud Scanner run complete.

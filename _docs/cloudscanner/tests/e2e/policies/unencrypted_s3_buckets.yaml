@@ -1,0 +1,9 @@
+name: "Unencrypted S3 Buckets"
+description: "Detect S3 buckets without encryption"
+resource_type: "s3-bucket"
+conditions:
+  - field: "encryption_enabled"
+    operator: "equals"
+    value: false
+severity: "medium"
+remediation: "Enable default encryption for the bucket"

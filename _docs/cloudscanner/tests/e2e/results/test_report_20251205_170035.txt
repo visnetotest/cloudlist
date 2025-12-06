@@ -1,0 +1,40 @@
+========================================
+CloudScanner AWS E2E Test Report
+========================================
+
+Test Date: Fri Dec  5 17:00:35 PST 2025
+Test Environment: LocalStack (AWS Mock)
+CloudScanner Binary: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/target/release/cloudscanner
+
+Test Summary:
+- Total Tests: 13
+- Passed: 4
+- Failed: 9
+- Success Rate: 30%
+
+Detailed Results:
+❌ FAIL: aws_s3_only
+❌ FAIL: aws_s3_localstack
+❌ FAIL: aws_ec2_only
+❌ FAIL: aws_ec2_localstack
+❌ FAIL: aws_multi_service
+❌ FAIL: s3_public_policy
+❌ FAIL: s3_encryption_policy
+❌ FAIL: ec2_public_ip_policy
+✅ PASS: output_format_console
+❌ FAIL: output_format_yaml
+✅ PASS: invalid_config
+✅ PASS: nonexistent_config
+✅ PASS: performance_test
+
+Files Generated:
+- Test Results: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/results/
+- Config Files: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/configs/
+- Policy Files: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/e2e/policies/
+
+Next Steps:
+- Review failed tests and logs
+- Check resource discovery accuracy
+- Validate policy evaluation results
+- Performance optimization if needed
+

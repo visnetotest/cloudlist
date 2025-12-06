@@ -1,0 +1,5 @@
+name: "Test Resource Policy"
+asset_type: "test-resource"
+rules:
+  - key: "test"
+    value: "value"

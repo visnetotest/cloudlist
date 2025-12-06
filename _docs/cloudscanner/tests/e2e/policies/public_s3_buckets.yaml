@@ -1,0 +1,9 @@
+name: "Public S3 Buckets"
+description: "Detect S3 buckets with public access"
+resource_type: "s3-bucket"
+conditions:
+  - field: "public_read"
+    operator: "equals"
+    value: true
+severity: "high"
+remediation: "Review bucket permissions and remove public access"

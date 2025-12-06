@@ -1,0 +1,5 @@
+name: "Public S3 Buckets"
+asset_type: "s3-bucket"
+rules:
+  - key: "public"
+    value: "true"

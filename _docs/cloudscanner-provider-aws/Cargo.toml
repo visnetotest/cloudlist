@@ -1,0 +1,40 @@
+[package]
+name = "cloudscanner-provider-aws"
+version = "0.1.0"
+edition = "2021"
+authors = ["CloudScanner Team"]
+
+[lib]
+name = "cloudscanner_provider_aws"
+crate-type = ["cdylib"]
+
+[dependencies]
+# CloudScanner dependencies
+cloudscanner = { path = "../cloudscanner" }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.8"
+tracing = "0.1"
+anyhow = "1.0"
+libloading = "0.8"
+
+# AWS SDK dependencies
+aws-config = "0.55"
+aws-sdk-ec2 = "0.28"
+aws-sdk-s3 = "0.28"
+aws-sdk-iam = "0.28"
+aws-sdk-lambda = "0.28"
+aws-sdk-rds = "0.28"
+aws-sdk-ecs = "0.28"
+aws-sdk-cloudtrail = "0.28"
+aws-sdk-cloudwatchlogs = "0.28"
+aws-sdk-cloudwatch = "0.28"
+aws-types = "0.55"
+
+[target.x86_64-apple-darwin]
+# Optimize for size
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

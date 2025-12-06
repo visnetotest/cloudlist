@@ -1,0 +1,3 @@
+[2m2025-12-05T23:40:50.696520Z[0m [32m INFO[0m Cloud Scanner PoC2: Initializing...
+[2m2025-12-05T23:40:50.696587Z[0m [32m INFO[0m Loading configuration from: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/tests/e2e/configs/aws_ec2_test.toml
+[2m2025-12-05T23:40:50.696599Z[0m [31mERROR[0m Failed to load configuration from /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/tests/e2e/configs/aws_ec2_test.toml: Config file not found: /Volumes/MacMini4-ssd/home/Users/kong/code_security/cloudlist/cloudscanner/tests/tests/e2e/configs/aws_ec2_test.toml

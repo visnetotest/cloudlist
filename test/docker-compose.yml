@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566" # Main endpoint for all services
+    healthcheck:
+      test: ["CMD", "awslocal", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - DEBUG=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SERVICES=lambda,rds,ecs,eks,iam,cloudtrail,cloudwatch,ec2,route53,elbv2,s3
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  aws-setup:
+    image: amazon/aws-cli:2.13.29
+    depends_on:
+      localstack:
+        condition: service_healthy # Wait for the healthcheck to pass
+    volumes:
+      - ./aws-setup.sh:/aws-setup.sh
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      # This is crucial: override the AWS endpoint to point to LocalStack
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    entrypoint: /bin/sh
+    command: /aws-setup.sh
+
+  cloudlist:
+    build:
+      context: ..  # Corrected: Go up one directory to the project root
+      dockerfile: Dockerfile
+    depends_on:
+      aws-setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./provider-config.yaml:/app/provider-config.yaml
+    command: >
+      /app/cloudlist 
+      -pc /app/provider-config.yaml 
+      -p aws -json
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      # This is crucial: override the AWS endpoint to point to LocalStack
+      - AWS_ENDPOINT_URL=http://localstack:4566
+
+volumes:
+  localstack_data:
