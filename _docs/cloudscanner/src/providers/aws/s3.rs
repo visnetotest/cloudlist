@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use tracing::info;
 
 use crate::models::provider::Resource;
-use super::config::AwsConfig;
+use super::AwsProviderConfig as AwsConfig;
 
 /// Trait for S3 discovery services
 #[async_trait]
@@ -13,6 +13,12 @@ pub trait S3Discovery: Send + Sync {
 
 /// Mock S3 Discovery for testing (will be replaced with real AWS SDK later)
 pub struct MockS3Discovery;
+
+impl Default for MockS3Discovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl S3Discovery for MockS3Discovery {

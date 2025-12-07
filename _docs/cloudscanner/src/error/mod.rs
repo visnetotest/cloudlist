@@ -20,19 +20,19 @@ pub enum CloudScannerError {
     #[error("Validation error: {field} - {message}")]
     Validation { field: String, message: String },
 
-    #[error("I/O error: {message}")]
+    #[error("I/O error")]
     Io { 
         #[from]
         source: std::io::Error 
     },
 
-    #[error("Serialization error: {message}")]
+    #[error("Serialization error")]
     Serialization { 
         #[from]
         source: serde_yaml::Error 
     },
 
-    #[error("TOML parsing error: {message}")]
+    #[error("TOML parsing error")]
     TomlParsing { 
         #[from]
         source: toml::de::Error 

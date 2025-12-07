@@ -23,6 +23,12 @@ pub trait CloudWatchDiscovery: Send + Sync {
 /// Mock CloudTrail discovery for testing
 pub struct MockCloudTrailDiscovery;
 
+impl Default for MockCloudTrailDiscovery {
+    fn default() -> Self {
+        Self
+    }
+}
+
 #[async_trait]
 impl CloudTrailDiscovery for MockCloudTrailDiscovery {
     async fn discover_trails(&self) -> Result<Vec<Resource>> {
@@ -88,6 +94,12 @@ impl CloudTrailDiscovery for MockCloudTrailDiscovery {
 
 /// Mock CloudWatch discovery for testing
 pub struct MockCloudWatchDiscovery;
+
+impl Default for MockCloudWatchDiscovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl CloudWatchDiscovery for MockCloudWatchDiscovery {

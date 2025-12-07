@@ -5,7 +5,7 @@ use aws_types::region::Region;
 use tracing::{info, error, debug};
 
 use crate::models::provider::Resource;
-use super::config::AwsConfig;
+use super::AwsProviderConfig as AwsConfig;
 
 /// Trait for EC2 discovery services
 #[async_trait]
@@ -26,7 +26,7 @@ impl Ec2DiscoveryImpl {
         
         let region = Region::new(config.region.clone());
         
-        let shared_config = aws_config::from_env()
+        let shared_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(region)
             .load()
             .await;
@@ -48,71 +48,34 @@ impl Ec2Discovery for Ec2DiscoveryImpl {
         
         match self.client.describe_instances().send().await {
             Ok(response) => {
-                if let Some(reservations) = response.reservations() {
-                    for reservation in reservations {
-                        if let Some(instances) = reservation.instances() {
-                            for instance in instances {
-                                debug!("Found instance: {:?}", instance);
-                                
-                                let instance_id = instance.instance_id()
-                                    .unwrap_or("unknown")
-                                    .to_string();
-                                
-                                let is_running = instance.state()
-                                    .and_then(|state| state.name())
-                                    .map(|s| matches!(s, aws_sdk_ec2::types::InstanceStateName::Running))
-                                    .unwrap_or(false);
-                                
-                                // Only include running instances for demo
-                                if is_running {
-                                    let mut resource = Resource::new(
-                                        "ec2-instance".to_string(),
-                                        instance_id.clone()
-                                    );
-                                    
-                                    // Add metadata
-                                    resource.add_metadata("region".to_string(), self.region.clone());
-                                    resource.add_metadata("instance_id".to_string(), instance_id.clone());
-                                    resource.add_metadata("state".to_string(), "Running".to_string());
-                                    
-                                    if let Some(instance_type) = instance.instance_type() {
-                                        resource.add_metadata(
-                                            "instance_type".to_string(),
-                                            format!("{:?}", instance_type)
-                                        );
-                                    }
-                                    
-                                    if let Some(public_ip) = instance.public_ip_address() {
-                                        resource.add_metadata(
-                                            "public_ip".to_string(),
-                                            public_ip.to_string()
-                                        );
-                                    }
-                                    
-                                    if let Some(private_ip) = instance.private_ip_address() {
-                                        resource.add_metadata(
-                                            "private_ip".to_string(),
-                                            private_ip.to_string()
-                                        );
-                                    }
-                                    
-                                    if let Some(launch_time) = instance.launch_time() {
-                                        // Convert DateTime to string using Debug format
-                                        resource.add_metadata(
-                                            "launch_time".to_string(),
-                                            format!("{:?}", launch_time)
-                                        );
-                                    }
-                                    
-                                    resources.push(resource);
-                                }
-                            }
-                        }
+                let reservations = response.reservations();
+                for reservation in reservations {
+                    let instances = reservation.instances();
+                    for instance in instances {
+                        let state_str = instance.state()
+                            .and_then(|s| s.name())
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        
+                        let instance_type_str = instance.instance_type()
+                            .map(|t| t.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        
+                        let resource = Resource::new("ec2-instance".to_string(), 
+                            instance.instance_id().unwrap_or("unknown").to_string())
+                            .with_metadata("region".to_string(), self.region.clone())
+                            .with_metadata("state".to_string(), state_str)
+                            .with_metadata("instance_type".to_string(), instance_type_str)
+                            .with_metadata("public_ip".to_string(), 
+                                instance.public_ip_address().unwrap_or("").to_string());
+                        
+                        resources.push(resource);
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to describe EC2 instances: {}", e);
+                return Err(e.into());
             }
         }
         
@@ -123,6 +86,12 @@ impl Ec2Discovery for Ec2DiscoveryImpl {
 
 /// Mock EC2 Discovery for testing
 pub struct MockEc2Discovery;
+
+impl Default for MockEc2Discovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl Ec2Discovery for MockEc2Discovery {

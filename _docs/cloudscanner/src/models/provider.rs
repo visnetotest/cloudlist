@@ -341,7 +341,7 @@ pub fn resources_to_c(resources: &[Resource]) -> Result<CResourceArray, &'static
                 
                 if !metadata_success {
                     // Cleanup all allocated metadata on failure
-                    for k in 0..j {
+                    for k in 0..metadata_count {
                         let metadata_item = &*metadata_ptr.add(k);
                         free_c_string(metadata_item.key);
                         free_c_string(metadata_item.value);

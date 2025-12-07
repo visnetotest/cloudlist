@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use tracing::{info, warn, error};
 
 use crate::models::provider::Resource;
-use super::config::AwsConfig;
+use super::AwsProviderConfig as AwsConfig;
 
 /// Lambda function discovery trait
 #[async_trait]
@@ -13,6 +13,12 @@ pub trait LambdaDiscovery: Send + Sync {
 
 /// Mock Lambda discovery for testing
 pub struct MockLambdaDiscovery;
+
+impl Default for MockLambdaDiscovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl LambdaDiscovery for MockLambdaDiscovery {
@@ -61,14 +67,11 @@ impl LambdaDiscoveryImpl {
     pub async fn new(config: AwsConfig) -> Result<Self> {
         info!("Creating AWS Lambda client for region: {}", config.region);
         
-        let mut aws_config = aws_config::from_env()
-            .region(aws_sdk_lambda::config::Region::new(config.region.clone()));
+        let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(aws_sdk_lambda::config::Region::new(config.region.clone()))
+            .load()
+            .await;
             
-        // Set custom endpoint if provided (for LocalStack)
-        if let Some(endpoint_url) = &config.endpoint_url {
-            aws_config = aws_config.endpoint_url(endpoint_url);
-        }
-        
         let client = aws_sdk_lambda::Client::new(&aws_config);
         
         Ok(Self { client, config })
@@ -92,8 +95,8 @@ impl LambdaDiscovery for LambdaDiscoveryImpl {
             
             match request.send().await {
                 Ok(response) => {
-                    if let Some(functions) = response.functions() {
-                        for function in functions {
+                    let functions = response.functions();
+                    for function in functions {
                             let resource = Resource::new("lambda-function".to_string(), 
                                                         function.function_name().unwrap_or("unknown").to_string())
                                 .with_metadata("function_name".to_string(), 

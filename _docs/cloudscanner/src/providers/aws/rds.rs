@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use tracing::{info, warn, error};
 
 use crate::models::provider::Resource;
-use super::config::AwsConfig;
+use super::AwsProviderConfig;
 
 /// RDS instance discovery trait
 #[async_trait]
@@ -13,6 +13,12 @@ pub trait RdsDiscovery: Send + Sync {
 
 /// Mock RDS discovery for testing
 pub struct MockRdsDiscovery;
+
+impl Default for MockRdsDiscovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl RdsDiscovery for MockRdsDiscovery {
@@ -64,14 +70,14 @@ impl RdsDiscovery for MockRdsDiscovery {
 /// Real AWS RDS discovery implementation
 pub struct RdsDiscoveryImpl {
     client: aws_sdk_rds::Client,
-    config: AwsConfig,
+    config: AwsProviderConfig,
 }
 
 impl RdsDiscoveryImpl {
-    pub async fn new(config: AwsConfig) -> Result<Self> {
+    pub async fn new(config: AwsProviderConfig) -> Result<Self> {
         info!("Creating AWS RDS client for region: {}", config.region);
         
-        let mut aws_config = aws_config::from_env()
+        let mut aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
             .region(aws_sdk_rds::config::Region::new(config.region.clone()));
             
         // Set custom endpoint if provided (for LocalStack)
@@ -79,7 +85,8 @@ impl RdsDiscoveryImpl {
             aws_config = aws_config.endpoint_url(endpoint_url);
         }
         
-        let client = aws_sdk_rds::Client::new(&aws_config);
+        let sdk_config = aws_config.load().await;
+        let client = aws_sdk_rds::Client::new(&sdk_config);
         
         Ok(Self { client, config })
     }
@@ -100,7 +107,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
                 request = request.marker(token);
             }
             
-            match request.send().await {
+                match request.send().await {
                 Ok(response) => {
                     if let Some(instances) = response.db_instances() {
                         for instance in instances {
@@ -187,7 +194,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
         match self.client.describe_db_clusters().send().await {
             Ok(response) => {
                 if let Some(clusters) = response.db_clusters() {
-                    for cluster in clusters {
+                    for cluster in clusters.iter() {
                         let resource = Resource::new("rds-cluster".to_string(), 
                                                     cluster.db_cluster_identifier().unwrap_or("unknown").to_string())
                                 .with_metadata("cluster_name".to_string(), 

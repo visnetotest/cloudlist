@@ -14,6 +14,12 @@ test-*.yaml
 /cloudlist
 /terraform/
 azure-readonly-config.yaml
-cloudscanner/target/*
-target/*
+cloudscanner/target/
+target/
+
+# Backup files
+*.bak
+
+# Working documents
+TODO.md
 

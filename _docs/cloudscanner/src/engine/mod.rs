@@ -2,12 +2,13 @@
 
 use crate::error::{CloudScannerError, Result};
 use libloading::{Library, Symbol};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn, error};
 
 use crate::models::provider::{Provider, TraitObject, Resource, ProviderInfo};
-use crate::providers::aws::create_aws_provider;
+use crate::providers::base::{DiscoveryProvider, Asset};
+use crate::providers::aws::{create_aws_provider, AwsProviderConfig};
 use crate::config::Config;
 use async_trait::async_trait;
 
@@ -35,6 +36,25 @@ impl LoadedLibrary {
             path: path.to_string_lossy().to_string(),
         })
     }
+}
+
+/// Create built-in AWS provider from configuration
+async fn create_builtin_aws_provider(provider_config: &crate::config::ProviderConfig) -> std::result::Result<Box<dyn Provider>, CloudScannerError> {
+    use crate::providers::aws::{AwsProvider, AwsProviderConfig};
+    use serde_yaml;
+    
+    // Create AWS config from provider config
+    let aws_config = if let Some(config_data) = &provider_config.config {
+        serde_yaml::from_value::<AwsProviderConfig>(config_data.clone())
+            .map_err(|e| CloudScannerError::config(format!("Failed to parse AWS config: {}", e)))?
+    } else {
+        // Default config for testing
+        AwsProviderConfig::default()
+    };
+    
+    let provider = AwsProvider::new(aws_config);
+    
+    Ok(Box::new(provider))
 }
 
 impl Drop for LoadedLibrary {
@@ -76,9 +96,17 @@ impl DiscoveryEngine {
                 }
                 "builtin-aws" => {
                     info!("Creating built-in AWS provider");
-                    // For now, create a dummy provider
-                    let provider = create_async_provider_adapter();
-                    self.providers.push(Arc::from(provider));
+                    match create_builtin_aws_provider(provider_config).await {
+                        Ok(provider) => {
+                            self.providers.push(Arc::from(provider));
+                            info!("Successfully created built-in AWS provider");
+                        }
+                        Err(e) => {
+                            error!("Failed to create built-in AWS provider: {}, falling back to dummy", e);
+                            let provider = create_async_provider_adapter();
+                            self.providers.push(Arc::from(provider));
+                        }
+                    }
                 }
                 _ => {
                     info!("Creating dummy provider for type: {}", provider_config.provider_type);
@@ -95,20 +123,62 @@ impl DiscoveryEngine {
         // Validate plugin before loading
         self.validate_plugin_security(path)?;
         
+        // Try different platform-specific extensions if the provided path doesn't exist
+        let final_path = if !path.exists() {
+            self.find_platform_plugin(path)?
+        } else {
+            path.to_path_buf()
+        };
+        
         // Load library with RAII wrapper for automatic cleanup
         let library = unsafe { 
-            Library::new(path)
+            Library::new(&final_path)
                 .map_err(|e| CloudScannerError::plugin(
-                    path.to_string_lossy(), 
+                    final_path.to_string_lossy(), 
                     format!("Failed to load library: {}", e)
                 ))?
         };
         
-        let loaded_lib = LoadedLibrary::new(library, path)?;
-        let provider_name = self.load_plugin_from_library(&loaded_lib, path).await?;
+        let loaded_lib = LoadedLibrary::new(library, &final_path)?;
+        let provider_name = self.load_plugin_from_library(&loaded_lib, &final_path).await?;
         
         self.loaded_libs.push(loaded_lib);
         Ok(provider_name)
+    }
+    
+    /// Find platform-specific plugin file based on the base path
+    fn find_platform_plugin(&self, path: &Path) -> std::result::Result<PathBuf, CloudScannerError> {
+        let stem = path.file_stem()
+            .ok_or_else(|| CloudScannerError::plugin(
+                path.to_string_lossy(), 
+                "Invalid plugin filename"
+            ))?;
+        
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        
+        // Try platform-specific extensions in order of preference
+        let extensions = if cfg!(target_os = "macos") {
+            vec!["dylib", "so"]
+        } else if cfg!(target_os = "linux") {
+            vec!["so", "dylib"]
+        } else if cfg!(target_os = "windows") {
+            vec!["dll", "so", "dylib"]
+        } else {
+            vec!["so", "dylib", "dll"]
+        };
+        
+        for ext in extensions {
+            let candidate = parent.join(format!("{}.{}", stem.to_string_lossy(), ext));
+            if candidate.exists() {
+                info!("Found platform plugin: {}", candidate.display());
+                return Ok(candidate);
+            }
+        }
+        
+        Err(CloudScannerError::plugin(
+            path.to_string_lossy(), 
+            "Plugin file not found for current platform"
+        ))
     }
     
     async fn load_plugin_from_library(&mut self, loaded_lib: &LoadedLibrary, path: &Path) -> Result<String> {
@@ -134,8 +204,8 @@ impl DiscoveryEngine {
                 match self.try_load_aws_provider(path).await {
                     Ok(provider_name) => return Ok(provider_name),
                     Err(e) => {
-                        warn!("Failed to create AWS provider: {}", e.sanitize_for_logging());
-                        // Fall back to dummy provider
+                        warn!("Failed to create AWS provider: {}, using dummy provider", e);
+                        // Fall through to create dummy provider
                     }
                 }
             }
@@ -343,29 +413,31 @@ impl DiscoveryEngine {
     }
 }
 
-/// Create a simple async provider adapter for testing
-pub fn create_async_provider_adapter() -> Box<dyn Provider> {
-    struct DummyProvider;
-    
-    #[async_trait]
-    impl Provider for DummyProvider {
-        fn info(&self) -> ProviderInfo {
-            ProviderInfo {
-                name: "dummy-provider".to_string(),
-                version: "1.0.0".to_string(),
-                description: "Dummy provider for testing".to_string(),
-                supported_resource_types: vec!["test-resource".to_string()],
+
+
+    /// Create a simple async provider adapter for testing
+    pub fn create_async_provider_adapter() -> Box<dyn Provider> {
+        struct DummyProvider;
+        
+        #[async_trait]
+        impl Provider for DummyProvider {
+            fn info(&self) -> ProviderInfo {
+                ProviderInfo {
+                    name: "dummy-provider".to_string(),
+                    version: "1.0.0".to_string(),
+                    description: "Dummy provider for testing".to_string(),
+                    supported_resource_types: vec!["test-resource".to_string()],
+                }
+            }
+
+            async fn discover(&self) -> Result<Vec<Resource>> {
+                Ok(vec![
+                    Resource::new("test-resource".to_string(), "test-id-1".to_string())
+                        .with_metadata("test".to_string(), "value".to_string()),
+                    Resource::new("test-resource".to_string(), "test-id-2".to_string())
+                ])
             }
         }
-
-        async fn discover(&self) -> Result<Vec<Resource>> {
-            Ok(vec![
-                Resource::new("test-resource".to_string(), "test-id-1".to_string())
-                    .with_metadata("test".to_string(), "value".to_string()),
-                Resource::new("test-resource".to_string(), "test-id-2".to_string())
-            ])
-        }
+        
+        Box::new(DummyProvider)
     }
-    
-    Box::new(DummyProvider)
-}

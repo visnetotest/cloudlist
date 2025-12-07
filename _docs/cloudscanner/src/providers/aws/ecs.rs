@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use tracing::{info, warn, error};
 
 use crate::models::provider::Resource;
-use super::config::AwsConfig;
+use super::AwsProviderConfig as AwsConfig;
 
 /// ECS cluster and service discovery trait
 #[async_trait]
@@ -15,6 +15,12 @@ pub trait EcsDiscovery: Send + Sync {
 
 /// Mock ECS discovery for testing
 pub struct MockEcsDiscovery;
+
+impl Default for MockEcsDiscovery {
+    fn default() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl EcsDiscovery for MockEcsDiscovery {

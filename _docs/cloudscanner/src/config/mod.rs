@@ -8,7 +8,7 @@ use crate::error::{CloudScannerError, Result};
 #[cfg(test)]
 pub mod tests;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct ProviderConfig {
     pub id: String,
     #[serde(rename = "type")]
@@ -17,11 +17,14 @@ pub struct ProviderConfig {
     pub config: Option<serde_yaml::Value>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     #[serde(rename = "provider")]
     pub providers: Vec<ProviderConfig>,
 }
+
+/// Alias for CloudScanner configuration to match expected interface
+pub type CloudScannerConfig = Config;
 
 pub fn load_config(path: &str) -> Result<Config> {
     info!("Loading configuration from: {}", path);
