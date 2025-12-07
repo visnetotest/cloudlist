@@ -131,7 +131,7 @@ impl EcsDiscovery for EcsDiscoveryImpl {
             
             match request.send().await {
                 Ok(response) => {
-                    if let Some(clusters) = response.clusters() {
+                    let clusters = response.clusters(); {
                         for cluster in clusters {
                             let resource = Resource::new("ecs-cluster".to_string(), 
                                                         cluster.cluster_name().unwrap_or("unknown").to_string())
@@ -202,7 +202,7 @@ impl EcsDiscovery for EcsDiscoveryImpl {
             
             match request.send().await {
                 Ok(response) => {
-                    if let Some(service_arns) = response.service_arns() {
+                    let service_arns = response.service_arns(); {
                         // Get detailed service information
                         match self.client.describe_services()
                             .set_services(service_arns.to_vec())

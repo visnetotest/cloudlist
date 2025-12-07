@@ -102,19 +102,19 @@ impl LambdaDiscovery for LambdaDiscoveryImpl {
                                 .with_metadata("function_name".to_string(), 
                                              function.function_name().unwrap_or("").to_string())
                                 .with_metadata("runtime".to_string(), 
-                                             function.runtime().unwrap_or("").to_string())
+                                             function.runtime().map(|r| r.as_str()).unwrap_or("").to_string())
                                 .with_metadata("handler".to_string(), 
                                              function.handler().unwrap_or("").to_string())
                                 .with_metadata("code_size".to_string(), 
-                                             function.code_size().unwrap_or(0).to_string())
+                                             function.code_size().to_string())
                                 .with_metadata("timeout".to_string(), 
-                                             function.timeout().unwrap_or(0).to_string())
+                                             function.timeout().to_string())
                                 .with_metadata("memory_size".to_string(), 
-                                             function.memory_size().unwrap_or(0).to_string())
+                                             function.memory_size().to_string())
                                 .with_metadata("last_modified".to_string(), 
                                              function.last_modified().unwrap_or("").to_string())
                                 .with_metadata("state".to_string(), 
-                                             function.state().unwrap_or("").to_string());
+                                             function.state().map(|s| s.as_str()).unwrap_or("").to_string());
                                 
                             // Add VPC configuration if present
                             if let Some(vpc_config) = function.vpc_config() {
@@ -122,11 +122,11 @@ impl LambdaDiscovery for LambdaDiscoveryImpl {
                                     resource.metadata.insert("vpc_id".to_string(), 
                                                           vpc_config.vpc_id().unwrap_or("").to_string());
                                 }
-                                if let Some(subnet_ids) = vpc_config.subnet_ids() {
+                                let subnet_ids = vpc_config.subnet_ids(); if !subnet_ids.is_empty() {
                                     resource.metadata.insert("subnet_ids".to_string(), 
                                                           format!("{:?}", subnet_ids));
                                 }
-                                if let Some(security_group_ids) = vpc_config.security_group_ids() {
+                                let security_group_ids = vpc_config.security_group_ids(); if !security_group_ids.is_empty() {
                                     resource.metadata.insert("security_group_ids".to_string(), 
                                                           format!("{:?}", security_group_ids));
                                 }

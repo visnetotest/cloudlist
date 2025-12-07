@@ -109,7 +109,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
             
                 match request.send().await {
                 Ok(response) => {
-                    if let Some(instances) = response.db_instances() {
+                    let instances = response.db_instances(); {
                         for instance in instances {
                             let resource = Resource::new("rds-instance".to_string(), 
                                                         instance.db_instance_identifier().unwrap_or("unknown").to_string())
@@ -193,7 +193,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
         // Also discover RDS clusters (Aurora)
         match self.client.describe_db_clusters().send().await {
             Ok(response) => {
-                if let Some(clusters) = response.db_clusters() {
+                let clusters = response.db_clusters(); {
                     for cluster in clusters.iter() {
                         let resource = Resource::new("rds-cluster".to_string(), 
                                                     cluster.db_cluster_identifier().unwrap_or("unknown").to_string())
