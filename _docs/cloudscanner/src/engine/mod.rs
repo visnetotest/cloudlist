@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{info, warn, error};
 
 use crate::models::provider::{Provider, TraitObject, Resource, ProviderInfo};
-use crate::providers::base::DiscoveryProvider;
+// use crate::providers::base::DiscoveryProvider;
 use crate::providers::aws::create_aws_provider;
 use crate::config::Config;
 use async_trait::async_trait;
@@ -192,7 +192,7 @@ impl DiscoveryEngine {
         for ext in extensions {
             let candidate = parent.join(format!("{}.{}", stem.to_string_lossy(), ext));
             if candidate.exists() {
-                info!("Found platform plugin: {}", candidate.display().into());
+                info!("Found platform plugin: {}", candidate.display());
                 return Ok(candidate);
             }
         }
@@ -414,11 +414,11 @@ impl DiscoveryEngine {
         
         for result in results {
             match result {
-                Ok(Ok((provider_name, resources))) => {
+                Ok(Ok((_provider_name, resources))) => {
                     all_resources.extend(resources);
                     successful_providers += 1;
                 }
-                Ok(Err((provider_name, _))) => {
+                Ok(Err((_provider_name, _))) => {
                     failed_providers += 1;
                 }
                 Err(join_error) => {

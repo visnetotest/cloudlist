@@ -171,7 +171,6 @@ impl EcsDiscovery for EcsDiscoveryImpl {
                         }
                     }
                     
-                    next_token = response.next_token().map(|s| s.to_string());
                     if next_token.is_none() {
                         break;
                     }
@@ -209,7 +208,7 @@ impl EcsDiscovery for EcsDiscoveryImpl {
                             .send()
                             .await {
                             Ok(detail_response) => {
-                                if let Some(services) = detail_response.services() {
+                                let services = detail_response.services(); {
                                     for service in services {
                                         let resource = Resource::new("ecs-service".to_string(), 
                                                                     service.service_name().unwrap_or("unknown").to_string())
@@ -275,7 +274,6 @@ impl EcsDiscovery for EcsDiscoveryImpl {
                         }
                     }
                     
-                    next_token = response.next_token().map(|s| s.to_string());
                     if next_token.is_none() {
                         break;
                     }
@@ -363,7 +361,6 @@ impl EcsDiscovery for EcsDiscoveryImpl {
                         }
                     }
                     
-                    next_token = response.next_token().map(|s| s.to_string());
                     if next_token.is_none() {
                         break;
                     }

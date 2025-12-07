@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use tracing::{info, warn, error};
+use tracing::{info, error};
 
 use crate::models::provider::Resource;
 use super::AwsProviderConfig as AwsConfig;

@@ -312,9 +312,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover EC2 instances
         if let Some(ec2) = &self.ec2_discovery {
             match ec2.discover_instances().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} EC2 instances", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover EC2 instances: {}", e);
@@ -325,9 +325,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover S3 buckets
         if let Some(s3) = &self.s3_discovery {
             match s3.discover_buckets().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} S3 buckets", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover S3 buckets: {}", e);
@@ -338,9 +338,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover Lambda functions
         if let Some(lambda) = &self.lambda_discovery {
             match lambda.discover_functions().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} Lambda functions", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover Lambda functions: {}", e);
@@ -351,9 +351,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover CloudFront distributions
         if let Some(cloudfront) = &self.cloudfront_discovery {
             match cloudfront.discover_distributions().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} CloudFront distributions", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover CloudFront distributions: {}", e);
@@ -364,9 +364,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover RDS instances
         if let Some(rds) = &self.rds_discovery {
             match rds.discover_instances().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} RDS instances", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover RDS instances: {}", e);
@@ -377,9 +377,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover ELB/ALB
         if let Some(elb) = &self.elb_discovery {
             match elb.discover_load_balancers().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} ELB/ALB instances", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover ELB/ALB instances: {}", e);
@@ -390,9 +390,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover ECS clusters
         if let Some(ecs) = &self.ecs_discovery {
             match ecs.discover_clusters().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} ECS clusters", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover ECS clusters: {}", e);
@@ -403,9 +403,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover EFS file systems
         if let Some(efs) = &self.efs_discovery {
             match efs.discover_file_systems().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} EFS file systems", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover EFS file systems: {}", e);
@@ -416,9 +416,9 @@ impl DiscoveryProvider for AwsProvider {
         // Discover Route53 zones
         if let Some(route53) = &self.route53_discovery {
             match route53.discover_zones().await {
-                Ok(mut assets) => {
+                Ok(assets) => {
                     info!("Discovered {} Route53 zones", assets.len());
-                    all_assets.append(&mut assets);
+                    all_assets.extend_from_iter(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover Route53 zones: {}", e);
@@ -454,14 +454,49 @@ impl crate::models::provider::Provider for AwsProvider {
             name: "aws".to_string(),
             version: "1.0.0".to_string(),
             description: "AWS cloud provider".to_string(),
-            supported_resource_types: self.get_enabled_service_types(),
+            supported_resource_types: vec!["ec2".to_string(), "s3".to_string()], // TODO: Get from config
         }
     }
 
-    async fn discover(&self) -> anyhow::Result<Vec<crate::models::provider::Resource>> {
-        // For now, return empty result to avoid blocking compilation
-        // TODO: Implement proper discovery
-        Ok(vec![])
+    // async fn discover(&self) -> anyhow::Result<Vec<crate::models::provider::Resource>> {
+    //     // For now, return empty result to avoid blocking compilation
+    //     // TODO: Implement proper discovery
+    //     Ok(vec![])
+    // }
+    
+    /// Discover all assets from all enabled services
+    pub async fn discover_all_assets(&self) -> Result<Vec<Asset>> {
+    }
+}
+
+#[derive(Debug)]
+pub enum AwsProviderConfigError {
+    ConfigParseError(String),
+}
+
+impl std::fmt::Display for AwsProviderConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AwsProviderConfigError::ConfigParseError(msg) => write!(f, "Config parse error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for AwsProviderConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            AwsProviderConfigError::ConfigParseError(_) => None,
+        }
+    }
+}
+
+impl TryFrom<crate::config::Config> for AwsProviderConfig {
+    type Error = AwsProviderConfigError;
+    
+    fn try_from(config: crate::config::Config) -> Result<Self, Self::Error> {
+        // For now, return default config
+        // TODO: Implement proper config parsing
+        Ok(AwsProviderConfig::default())
     }
 }
 
