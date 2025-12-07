@@ -141,7 +141,6 @@ impl LambdaDiscovery for LambdaDiscoveryImpl {
                             }
                             
                             resources.push(resource);
-                        }
                     }
                     
                     next_token = response.next_marker().map(|s| s.to_string());

@@ -1,6 +1,7 @@
 // cloudscanner/src/engine/mod.rs
 
-use crate::error::{CloudScannerError, Result};
+use crate::error::CloudScannerError;
+use anyhow::Result;
 use libloading::{Library, Symbol};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
