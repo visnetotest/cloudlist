@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use aws_sdk_ec2::Client;
 use aws_types::region::Region;
-use tracing::{info, error, debug};
+use tracing::{info, error};
 
 use crate::models::provider::Resource;
 use super::AwsProviderConfig as AwsConfig;

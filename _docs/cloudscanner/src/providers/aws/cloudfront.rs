@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use tracing::info;
 
-use crate::providers::base::{DiscoveryProvider, Asset};
+use crate::providers::base::Asset;
 use crate::error::CloudScannerError;
 
 /// Mock CloudFront discovery for testing

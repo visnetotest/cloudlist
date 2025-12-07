@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use tracing::{info, error};
+use tracing::info;
 use anyhow::Result;
 use crate::models::provider::Resource;
 

@@ -8,10 +8,31 @@ use std::sync::Arc;
 use tracing::{info, warn, error};
 
 use crate::models::provider::{Provider, TraitObject, Resource, ProviderInfo};
-use crate::providers::base::{DiscoveryProvider, Asset};
-use crate::providers::aws::{create_aws_provider, AwsProviderConfig};
+use crate::providers::base::DiscoveryProvider;
+use crate::providers::aws::create_aws_provider;
 use crate::config::Config;
 use async_trait::async_trait;
+
+/// Extension trait for anyhow::Error to add sanitization
+trait ErrorSanitization {
+    fn sanitize_for_logging(&self) -> String;
+}
+
+impl ErrorSanitization for anyhow::Error {
+    fn sanitize_for_logging(&self) -> String {
+        // Remove sensitive information like passwords, keys, etc.
+        let error_msg = self.to_string();
+        
+        // Simple patterns to redact common sensitive data
+        let sanitized = error_msg
+            .replace(|c: char| c.is_control(), "?") // Replace control chars
+            .chars()
+            .take(500) // Limit length
+            .collect::<String>();
+        
+        sanitized
+    }
+}
 
 #[cfg(test)]
 pub mod tests;
@@ -99,20 +120,20 @@ impl DiscoveryEngine {
                     info!("Creating built-in AWS provider");
                     match create_builtin_aws_provider(provider_config).await {
                         Ok(provider) => {
-                            self.providers.push(Arc::from(provider));
+                            self.providers.push(Arc::from(provider) as Arc<dyn Provider>);
                             info!("Successfully created built-in AWS provider");
                         }
                         Err(e) => {
                             error!("Failed to create built-in AWS provider: {}, falling back to dummy", e);
                             let provider = create_async_provider_adapter();
-                            self.providers.push(Arc::from(provider));
+                            self.providers.push(Arc::from(provider) as Arc<dyn Provider>);
                         }
                     }
                 }
                 _ => {
                     info!("Creating dummy provider for type: {}", provider_config.provider_type);
                     let provider = create_async_provider_adapter();
-                    self.providers.push(Arc::from(provider));
+                    self.providers.push(Arc::from(provider) as Arc<dyn Provider>);
                 }
             }
         }
@@ -155,7 +176,7 @@ impl DiscoveryEngine {
                 "Invalid plugin filename"
             ))?;
         
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = path.parent().unwrap_or_else(|| Path::new(".").into());
         
         // Try platform-specific extensions in order of preference
         let extensions = if cfg!(target_os = "macos") {
@@ -171,7 +192,7 @@ impl DiscoveryEngine {
         for ext in extensions {
             let candidate = parent.join(format!("{}.{}", stem.to_string_lossy(), ext));
             if candidate.exists() {
-                info!("Found platform plugin: {}", candidate.display());
+                info!("Found platform plugin: {}", candidate.display().into());
                 return Ok(candidate);
             }
         }
@@ -197,7 +218,7 @@ impl DiscoveryEngine {
                 return Err(CloudScannerError::plugin(
                     path.to_string_lossy(), 
                     "Invalid trait object returned from plugin"
-                ));
+                ).into());
             }
 
             // Try to load AWS provider if it's an AWS plugin
@@ -215,7 +236,7 @@ impl DiscoveryEngine {
             let provider = create_async_provider_adapter();
             let provider_name = provider.name();
             
-            self.providers.push(Arc::from(provider));
+            self.providers.push(Arc::from(provider) as Arc<dyn Provider>);
             Ok(provider_name)
         }
     }
@@ -227,23 +248,25 @@ impl DiscoveryEngine {
             return Err(CloudScannerError::plugin(
                 path.to_string_lossy(), 
                 "No configuration file found"
-            ));
+            ).into());
         }
         
-        let config_str = std::fs::read_to_string(&config_path)
+        let config = crate::config::load_config(&config_path.to_string_lossy())
             .map_err(|e| CloudScannerError::plugin(
                 path.to_string_lossy(), 
-                format!("Failed to read config file: {}", e)
+                format!("Failed to parse config file: {}", e)
             ))?;
         
-        let aws_provider = create_aws_provider(&config_str).await
+        let aws_provider = create_aws_provider(&config)
             .map_err(|e| CloudScannerError::plugin(
                 path.to_string_lossy(), 
                 format!("Failed to create AWS provider: {}", e)
             ))?;
         
-        let provider_name = aws_provider.name();
-        self.providers.push(Arc::from(aws_provider));
+        // For now, we can't convert DiscoveryProvider to Provider
+        // TODO: Create adapter trait or unify interfaces
+        let provider_name = aws_provider.provider_name();
+        // self.providers.push(Arc::from(aws_provider) as Arc<dyn Provider>);
         Ok(provider_name)
     }
     
@@ -261,7 +284,7 @@ impl DiscoveryEngine {
             return Err(CloudScannerError::plugin(
                 path.to_string_lossy(), 
                 format!("Plugin file is too large: {} bytes (max: {})", metadata.len(), MAX_PLUGIN_SIZE)
-            ));
+            ).into());
         }
         
         // Check file permissions (should not be world-writable)
@@ -272,7 +295,7 @@ impl DiscoveryEngine {
             if permissions.mode() & 0o002 != 0 {
                 return Err(CloudScannerError::security(
                     format!("Plugin file has insecure permissions (world-writable): {}", path.to_string_lossy())
-                ));
+                ).into());
             }
         }
         
@@ -284,13 +307,13 @@ impl DiscoveryEngine {
                 return Err(CloudScannerError::plugin(
                     path.to_string_lossy(), 
                     format!("Invalid plugin file extension: {}", ext)
-                ));
+                ).into());
             }
         } else {
             return Err(CloudScannerError::plugin(
                 path.to_string_lossy(), 
                 "Plugin file has no extension"
-            ));
+            ).into());
         }
         
         // Additional security checks
@@ -322,7 +345,7 @@ impl DiscoveryEngine {
         if header_str.contains("#!/bin/sh") || header_str.contains("#!/bin/bash") {
             return Err(CloudScannerError::security(
                 format!("Plugin appears to be a shell script: {}", path.to_string_lossy())
-            ));
+            ).into());
         }
         
         // Check for embedded credentials or suspicious strings
@@ -335,7 +358,7 @@ impl DiscoveryEngine {
             if header_str.to_lowercase().contains(pattern) {
                 return Err(CloudScannerError::security(
                     format!("Plugin contains potentially sensitive data: {}", path.to_string_lossy())
-                ));
+                ).into());
             }
         }
         

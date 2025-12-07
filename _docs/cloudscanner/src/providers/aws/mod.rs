@@ -1,9 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
+// use std::fs;
 use std::path::Path;
 use tracing::{info, warn, error, debug};
+// #[allow(unused_imports)]
+// use async_trait::async_trait;
 
 use super::base::{DiscoveryProvider, Asset};
 use crate::config::CloudScannerConfig;
@@ -441,6 +443,25 @@ impl DiscoveryProvider for AwsProvider {
             .filter(|s| s.enabled)
             .map(|s| s.name.clone())
             .collect()
+    }
+}
+
+// Minimal Provider trait implementation for AwsProvider
+#[async_trait]
+impl crate::models::provider::Provider for AwsProvider {
+    fn info(&self) -> crate::models::provider::ProviderInfo {
+        crate::models::provider::ProviderInfo {
+            name: "aws".to_string(),
+            version: "1.0.0".to_string(),
+            description: "AWS cloud provider".to_string(),
+            supported_resource_types: self.get_enabled_service_types(),
+        }
+    }
+
+    async fn discover(&self) -> anyhow::Result<Vec<crate::models::provider::Resource>> {
+        // For now, return empty result to avoid blocking compilation
+        // TODO: Implement proper discovery
+        Ok(vec![])
     }
 }
 

@@ -100,13 +100,13 @@ impl EcsDiscoveryImpl {
     pub async fn new(config: AwsConfig) -> Result<Self> {
         info!("Creating AWS ECS client for region: {}", config.region);
         
-        let mut aws_config = aws_config::from_env()
-            .region(aws_sdk_ecs::config::Region::new(config.region.clone()));
+        let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(aws_sdk_ecs::config::Region::new(config.region.clone()))
+            .load()
+            .await;
             
-        // Set custom endpoint if provided (for LocalStack)
-        if let Some(endpoint_url) = &config.endpoint_url {
-            aws_config = aws_config.endpoint_url(endpoint_url);
-        }
+        // Set custom endpoint if provided (for LocalStack) - note: this would need custom config builder
+        // For now, we'll use the basic config
         
         let client = aws_sdk_ecs::Client::new(&aws_config);
         

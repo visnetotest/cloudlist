@@ -1,7 +1,7 @@
 // cloudscanner/src/config/mod.rs
 
 use serde::Deserialize;
-use tracing::{info, error};
+use tracing::info;
 use std::path::Path;
 use crate::error::{CloudScannerError, Result};
 
