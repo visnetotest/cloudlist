@@ -1,16 +1,16 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use aws_sdk_ec2::Client;
 use aws_types::region::Region;
 use tracing::{info, error};
 
-use crate::models::provider::Resource;
+use crate::providers::base::Asset;
+use crate::error::CloudScannerError;
 use super::AwsProviderConfig as AwsConfig;
 
 /// Trait for EC2 discovery services
 #[async_trait]
 pub trait Ec2Discovery: Send + Sync {
-    async fn discover_instances(&self) -> Result<Vec<Resource>>;
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError>;
 }
 
 /// Real EC2 Discovery Service Implementation
@@ -21,7 +21,7 @@ pub struct Ec2DiscoveryImpl {
 
 impl Ec2DiscoveryImpl {
     /// Create a new EC2 discovery service
-    pub async fn new(config: AwsConfig) -> Result<Self> {
+    pub async fn new(config: AwsConfig) -> Result<Self, CloudScannerError> {
         info!("Creating EC2 client for region: {}", config.region);
         
         let region = Region::new(config.region.clone());
@@ -42,9 +42,9 @@ impl Ec2DiscoveryImpl {
 
 #[async_trait]
 impl Ec2Discovery for Ec2DiscoveryImpl {
-    async fn discover_instances(&self) -> Result<Vec<Resource>> {
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Starting EC2 instance discovery in region: {}", self.region);
-        let mut resources = Vec::new();
+        let mut assets = Vec::new();
         
         match self.client.describe_instances().send().await {
             Ok(response) => {
@@ -61,7 +61,7 @@ impl Ec2Discovery for Ec2DiscoveryImpl {
                             .map(|t| t.to_string())
                             .unwrap_or_else(|| "unknown".to_string());
                         
-                        let resource = Resource::new("ec2-instance".to_string(), 
+                        let asset = Asset::new("ec2-instance".to_string(), 
                             instance.instance_id().unwrap_or("unknown").to_string())
                             .with_metadata("region".to_string(), self.region.clone())
                             .with_metadata("state".to_string(), state_str)
@@ -69,18 +69,18 @@ impl Ec2Discovery for Ec2DiscoveryImpl {
                             .with_metadata("public_ip".to_string(), 
                                 instance.public_ip_address().unwrap_or("").to_string());
                         
-                        resources.push(resource);
+                        assets.push(asset);
                     }
                 }
             }
             Err(e) => {
                 error!("Failed to describe EC2 instances: {}", e);
-                return Err(e.into());
+                return Err(CloudScannerError::provider("EC2", format!("failed to describe instances: {}", e)));
             }
         }
         
-        info!("Discovered {} EC2 instances in region {}", resources.len(), self.region);
-        Ok(resources)
+        info!("Discovered {} EC2 instances in region {}", assets.len(), self.region);
+        Ok(assets)
     }
 }
 
@@ -95,10 +95,10 @@ impl Default for MockEc2Discovery {
 
 #[async_trait]
 impl Ec2Discovery for MockEc2Discovery {
-    async fn discover_instances(&self) -> Result<Vec<Resource>> {
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Mock EC2 discovery returning test instances");
         Ok(vec![
-            Resource::new("ec2-instance".to_string(), "i-1234567890abcdef0".to_string())
+            Asset::new("ec2-instance".to_string(), "i-1234567890abcdef0".to_string())
                 .with_metadata("region".to_string(), "us-east-1".to_string())
                 .with_metadata("state".to_string(), "running".to_string())
                 .with_metadata("instance_type".to_string(), "t3.micro".to_string())

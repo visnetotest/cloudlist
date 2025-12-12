@@ -1,14 +1,14 @@
-use anyhow::Result;
 use async_trait::async_trait;
 use tracing::{info, warn, error};
 
-use crate::models::provider::Resource;
+use crate::providers::base::Asset;
+use crate::error::CloudScannerError;
 use super::AwsProviderConfig;
 
 /// RDS instance discovery trait
 #[async_trait]
 pub trait RdsDiscovery: Send + Sync {
-    async fn discover_instances(&self) -> Result<Vec<Resource>>;
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError>;
 }
 
 /// Mock RDS discovery for testing
@@ -22,11 +22,11 @@ impl Default for MockRdsDiscovery {
 
 #[async_trait]
 impl RdsDiscovery for MockRdsDiscovery {
-    async fn discover_instances(&self) -> Result<Vec<Resource>> {
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Using mock RDS discovery");
         
         Ok(vec![
-            Resource::new("rds-instance".to_string(), "test-mysql-db-1".to_string())
+            Asset::new("rds-instance".to_string(), "test-mysql-db-1".to_string())
                 .with_metadata("db_name".to_string(), "test-mysql-db-1".to_string())
                 .with_metadata("engine".to_string(), "mysql".to_string())
                 .with_metadata("engine_version".to_string(), "8.0.35".to_string())
@@ -38,7 +38,7 @@ impl RdsDiscovery for MockRdsDiscovery {
                 .with_metadata("status".to_string(), "available".to_string())
                 .with_metadata("backup_retention_period".to_string(), "7".to_string()),
                 
-            Resource::new("rds-instance".to_string(), "prod-postgres-db-1".to_string())
+            Asset::new("rds-instance".to_string(), "prod-postgres-db-1".to_string())
                 .with_metadata("db_name".to_string(), "prod-postgres-db-1".to_string())
                 .with_metadata("engine".to_string(), "postgres".to_string())
                 .with_metadata("engine_version".to_string(), "15.4".to_string())
@@ -51,7 +51,7 @@ impl RdsDiscovery for MockRdsDiscovery {
                 .with_metadata("backup_retention_period".to_string(), "30".to_string())
                 .with_metadata("deletion_protection".to_string(), "true".to_string()),
                 
-            Resource::new("rds-instance".to_string(), "dev-mariadb-cluster-1".to_string())
+            Asset::new("rds-instance".to_string(), "dev-mariadb-cluster-1".to_string())
                 .with_metadata("db_name".to_string(), "dev-mariadb-cluster-1".to_string())
                 .with_metadata("engine".to_string(), "mariadb".to_string())
                 .with_metadata("engine_version".to_string(), "10.11.6".to_string())
@@ -74,7 +74,7 @@ pub struct RdsDiscoveryImpl {
 }
 
 impl RdsDiscoveryImpl {
-    pub async fn new(config: AwsProviderConfig) -> Result<Self> {
+    pub async fn new(config: AwsProviderConfig) -> Result<Self, CloudScannerError> {
         info!("Creating AWS RDS client for region: {}", config.region);
         
         let mut aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
@@ -94,10 +94,10 @@ impl RdsDiscoveryImpl {
 
 #[async_trait]
 impl RdsDiscovery for RdsDiscoveryImpl {
-    async fn discover_instances(&self) -> Result<Vec<Resource>> {
+    async fn discover_instances(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Discovering RDS instances in region: {}", self.config.region);
         
-        let mut resources = Vec::new();
+        let mut assets = Vec::new();
         let mut next_token: Option<String> = None;
         
         loop {
@@ -111,8 +111,8 @@ impl RdsDiscovery for RdsDiscoveryImpl {
                 Ok(response) => {
                     let instances = response.db_instances(); {
                         for instance in instances {
-                            let resource = Resource::new("rds-instance".to_string(), 
-                                                        instance.db_instance_identifier().unwrap_or("unknown").to_string())
+                            let mut asset = Asset::new("rds-instance".to_string(), 
+                                                              instance.db_instance_identifier().unwrap_or("unknown").to_string())
                                 .with_metadata("db_name".to_string(), 
                                              instance.db_instance_identifier().unwrap_or("").to_string())
                                 .with_metadata("engine".to_string(), 
@@ -137,44 +137,45 @@ impl RdsDiscovery for RdsDiscoveryImpl {
                                              instance.deletion_protection().unwrap_or(false).to_string());
                             
                             // Add VPC configuration if present
-                            if let Some(vpc_security_groups) = instance.vpc_security_groups() {
+                            let vpc_security_groups = instance.vpc_security_groups();
+                            if !vpc_security_groups.is_empty() {
                                 let sg_ids: Vec<String> = vpc_security_groups
                                     .iter()
                                     .filter_map(|sg| sg.vpc_security_group_id())
                                     .map(|id| id.to_string())
                                     .collect();
                                 if !sg_ids.is_empty() {
-                                    resource.metadata.insert("security_group_ids".to_string(), 
-                                                          format!("{:?}", sg_ids));
+                                    asset.add_metadata("security_group_ids".to_string(), 
+                                                      format!("{:?}", sg_ids));
                                 }
                             }
                             
                             if let Some(db_subnet_group) = instance.db_subnet_group() {
                                 if let Some(subnet_name) = db_subnet_group.db_subnet_group_name() {
-                                    resource.metadata.insert("subnet_group".to_string(), 
-                                                          subnet_name.to_string());
+                                    asset.add_metadata("subnet_group".to_string(), 
+                                                      subnet_name.to_string());
                                 }
                             }
                             
                             // Add endpoint information if present
                             if let Some(endpoint) = instance.endpoint() {
                                 if let Some(address) = endpoint.address() {
-                                    resource.metadata.insert("endpoint_address".to_string(), 
-                                                          address.to_string());
+                                    asset.add_metadata("endpoint_address".to_string(), 
+                                                      address.to_string());
                                 }
                                 if let Some(port) = endpoint.port() {
-                                    resource.metadata.insert("endpoint_port".to_string(), 
-                                                          port.to_string());
+                                    asset.add_metadata("endpoint_port".to_string(), 
+                                                      port.to_string());
                                 }
                             }
                             
                             // Add availability zone
                             if let Some(az) = instance.availability_zone() {
-                                resource.metadata.insert("availability_zone".to_string(), 
-                                                      az.to_string());
+                                asset.add_metadata("availability_zone".to_string(), 
+                                                  az.to_string());
                             }
                             
-                            resources.push(resource);
+                            assets.push(asset);
                         }
                     }
                     
@@ -185,7 +186,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
                 }
                 Err(e) => {
                     error!("Failed to describe RDS instances: {}", e);
-                    return Err(anyhow::anyhow!("RDS discovery failed: {}", e));
+                    return Err(CloudScannerError::provider("RDS", format!("discovery failed: {}", e)));
                 }
             }
         }
@@ -195,8 +196,8 @@ impl RdsDiscovery for RdsDiscoveryImpl {
             Ok(response) => {
                 let clusters = response.db_clusters(); {
                     for cluster in clusters.iter() {
-                        let resource = Resource::new("rds-cluster".to_string(), 
-                                                    cluster.db_cluster_identifier().unwrap_or("unknown").to_string())
+                        let mut asset = Asset::new("rds-cluster".to_string(), 
+                                                         cluster.db_cluster_identifier().unwrap_or("unknown").to_string())
                                 .with_metadata("cluster_name".to_string(), 
                                              cluster.db_cluster_identifier().unwrap_or("").to_string())
                                 .with_metadata("engine".to_string(), 
@@ -214,30 +215,31 @@ impl RdsDiscovery for RdsDiscoveryImpl {
                                 .with_metadata("scalable".to_string(), "true".to_string());
                         
                         // Add cluster members
-                        if let Some(members) = cluster.db_cluster_members() {
+                        let members = cluster.db_cluster_members();
+                        if !members.is_empty() {
                             let member_names: Vec<String> = members
                                 .iter()
                                 .filter_map(|m| m.db_instance_identifier())
                                 .map(|id| id.to_string())
                                 .collect();
                             if !member_names.is_empty() {
-                                resource.metadata.insert("cluster_members".to_string(), 
+                                asset.add_metadata("cluster_members".to_string(), 
                                                       format!("{:?}", member_names));
                             }
                         }
                         
                         // Add endpoint information
                         if let Some(endpoint) = cluster.endpoint() {
-                            resource.metadata.insert("endpoint_address".to_string(), 
-                                                  endpoint.to_string());
+                            asset.add_metadata("endpoint_address".to_string(), 
+                                              endpoint.to_string());
                         }
                         
                         if let Some(reader_endpoint) = cluster.reader_endpoint() {
-                            resource.metadata.insert("reader_endpoint".to_string(), 
-                                                  reader_endpoint.to_string());
+                            asset.add_metadata("reader_endpoint".to_string(), 
+                                              reader_endpoint.to_string());
                         }
                         
-                        resources.push(resource);
+                        assets.push(asset);
                     }
                 }
             }
@@ -247,7 +249,7 @@ impl RdsDiscovery for RdsDiscoveryImpl {
             }
         }
         
-        info!("Discovered {} RDS resources (instances + clusters)", resources.len());
-        Ok(resources)
+        info!("Discovered {} RDS assets (instances + clusters)", assets.len());
+        Ok(assets)
     }
 }

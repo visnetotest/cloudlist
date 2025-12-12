@@ -314,7 +314,7 @@ impl DiscoveryProvider for AwsProvider {
             match ec2.discover_instances().await {
                 Ok(assets) => {
                     info!("Discovered {} EC2 instances", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover EC2 instances: {}", e);
@@ -327,7 +327,7 @@ impl DiscoveryProvider for AwsProvider {
             match s3.discover_buckets().await {
                 Ok(assets) => {
                     info!("Discovered {} S3 buckets", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover S3 buckets: {}", e);
@@ -340,7 +340,7 @@ impl DiscoveryProvider for AwsProvider {
             match lambda.discover_functions().await {
                 Ok(assets) => {
                     info!("Discovered {} Lambda functions", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover Lambda functions: {}", e);
@@ -353,7 +353,7 @@ impl DiscoveryProvider for AwsProvider {
             match cloudfront.discover_distributions().await {
                 Ok(assets) => {
                     info!("Discovered {} CloudFront distributions", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover CloudFront distributions: {}", e);
@@ -366,7 +366,7 @@ impl DiscoveryProvider for AwsProvider {
             match rds.discover_instances().await {
                 Ok(assets) => {
                     info!("Discovered {} RDS instances", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover RDS instances: {}", e);
@@ -379,7 +379,7 @@ impl DiscoveryProvider for AwsProvider {
             match elb.discover_load_balancers().await {
                 Ok(assets) => {
                     info!("Discovered {} ELB/ALB instances", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover ELB/ALB instances: {}", e);
@@ -392,7 +392,7 @@ impl DiscoveryProvider for AwsProvider {
             match ecs.discover_clusters().await {
                 Ok(assets) => {
                     info!("Discovered {} ECS clusters", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover ECS clusters: {}", e);
@@ -405,7 +405,7 @@ impl DiscoveryProvider for AwsProvider {
             match efs.discover_file_systems().await {
                 Ok(assets) => {
                     info!("Discovered {} EFS file systems", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover EFS file systems: {}", e);
@@ -418,7 +418,7 @@ impl DiscoveryProvider for AwsProvider {
             match route53.discover_zones().await {
                 Ok(assets) => {
                     info!("Discovered {} Route53 zones", assets.len());
-                    all_assets.extend_from_iter(assets);
+                    all_assets.extend(assets);
                 }
                 Err(e) => {
                     error!("Failed to discover Route53 zones: {}", e);
@@ -458,14 +458,140 @@ impl crate::models::provider::Provider for AwsProvider {
         }
     }
 
-    // async fn discover(&self) -> anyhow::Result<Vec<crate::models::provider::Resource>> {
-    //     // For now, return empty result to avoid blocking compilation
-    //     // TODO: Implement proper discovery
-    //     Ok(vec![])
-    // }
-    
+    async fn discover(&self) -> anyhow::Result<Vec<crate::models::provider::Resource>> {
+        // Convert Asset discoveries to Resource format
+        let assets = self.discover_all_assets().await
+            .map_err(|e| anyhow::anyhow!("Failed to discover AWS assets: {}", e))?;
+        
+        let mut resources = Vec::new();
+        for asset in assets {
+            let mut resource = crate::models::provider::Resource::new(
+                asset.asset_type.clone(),
+                asset.id.clone(),
+            );
+            
+            // Add metadata from asset
+            for (key, value) in asset.metadata {
+                resource.add_metadata(key, value);
+            }
+            
+            // Add tags as metadata
+            for (key, value) in asset.tags {
+                resource.add_metadata(format!("tag:{}", key), value);
+            }
+            
+            // Add name and region as metadata if available
+            if let Some(name) = asset.name {
+                resource.add_metadata("name".to_string(), name);
+            }
+            if let Some(region) = asset.region {
+                resource.add_metadata("region".to_string(), region);
+            }
+            
+            resources.push(resource);
+        }
+        
+        Ok(resources)
+    }
+}
+
+impl AwsProvider {
     /// Discover all assets from all enabled services
-    pub async fn discover_all_assets(&self) -> Result<Vec<Asset>> {
+    pub async fn discover_all_assets(&self) -> Result<Vec<Asset>, CloudScannerError> {
+        let mut all_assets = Vec::new();
+
+        // Discover EC2 instances
+        if let Some(ec2) = &self.ec2_discovery {
+            match ec2.discover_instances().await {
+                Ok(assets) => {
+                    info!("Discovered {} EC2 instances", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover EC2 instances: {}", e);
+                }
+            }
+        }
+
+        // Discover S3 buckets
+        if let Some(s3) = &self.s3_discovery {
+            match s3.discover_buckets().await {
+                Ok(assets) => {
+                    info!("Discovered {} S3 buckets", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover S3 buckets: {}", e);
+                }
+            }
+        }
+
+        // Discover Lambda functions
+        if let Some(lambda) = &self.lambda_discovery {
+            match lambda.discover_functions().await {
+                Ok(assets) => {
+                    info!("Discovered {} Lambda functions", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover Lambda functions: {}", e);
+                }
+            }
+        }
+
+        // Discover CloudFront distributions
+        if let Some(cloudfront) = &self.cloudfront_discovery {
+            match cloudfront.discover_distributions().await {
+                Ok(assets) => {
+                    info!("Discovered {} CloudFront distributions", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover CloudFront distributions: {}", e);
+                }
+            }
+        }
+
+        // Discover RDS instances
+        if let Some(rds) = &self.rds_discovery {
+            match rds.discover_instances().await {
+                Ok(assets) => {
+                    info!("Discovered {} RDS instances", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover RDS instances: {}", e);
+                }
+            }
+        }
+
+        // Discover ELB/ALB
+        if let Some(elb) = &self.elb_discovery {
+            match elb.discover_load_balancers().await {
+                Ok(assets) => {
+                    info!("Discovered {} ELB/ALB instances", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover ELB/ALB instances: {}", e);
+                }
+            }
+        }
+
+        // Discover ECS clusters
+        if let Some(ecs) = &self.ecs_discovery {
+            match ecs.discover_clusters().await {
+                Ok(assets) => {
+                    info!("Discovered {} ECS clusters", assets.len());
+                    all_assets.extend(assets);
+                }
+                Err(e) => {
+                    error!("Failed to discover ECS clusters: {}", e);
+                }
+            }
+        }
+
+        Ok(all_assets)
     }
 }
 
@@ -493,7 +619,7 @@ impl std::error::Error for AwsProviderConfigError {
 impl TryFrom<crate::config::Config> for AwsProviderConfig {
     type Error = AwsProviderConfigError;
     
-    fn try_from(config: crate::config::Config) -> Result<Self, Self::Error> {
+    fn try_from(_config: crate::config::Config) -> Result<Self, Self::Error> {
         // For now, return default config
         // TODO: Implement proper config parsing
         Ok(AwsProviderConfig::default())
@@ -505,7 +631,7 @@ pub fn create_aws_provider(config: &CloudScannerConfig) -> Result<Box<dyn Discov
     let aws_config: AwsProviderConfig = config.clone().try_into()
         .map_err(|e| CloudScannerError::config(format!("Invalid AWS configuration: {}", e)))?;
 
-    let mut provider = AwsProvider::new(aws_config);
+    let provider = AwsProvider::new(aws_config);
     
     // Initialize services asynchronously - this would need to be called after creation
     // For now, we'll return the provider and let the caller initialize

@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use tracing::info;
-use anyhow::Result;
-use crate::models::provider::Resource;
+use crate::providers::base::Asset;
+use crate::error::CloudScannerError;
 
 #[async_trait]
 pub trait EfsDiscovery: Send + Sync {
-    async fn discover_file_systems(&self) -> Result<Vec<Resource>>;
+    async fn discover_file_systems(&self) -> Result<Vec<Asset>, CloudScannerError>;
 }
 
 pub struct EfsDiscoveryImpl;
@@ -19,7 +19,7 @@ impl EfsDiscoveryImpl {
 
 #[async_trait]
 impl EfsDiscovery for EfsDiscoveryImpl {
-    async fn discover_file_systems(&self) -> Result<Vec<Resource>> {
+    async fn discover_file_systems(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Discovering EFS file systems");
         // TODO: Implement actual EFS discovery
         Ok(vec![])
@@ -36,10 +36,10 @@ impl Default for MockEfsDiscovery {
 
 #[async_trait]
 impl EfsDiscovery for MockEfsDiscovery {
-    async fn discover_file_systems(&self) -> Result<Vec<Resource>> {
+    async fn discover_file_systems(&self) -> Result<Vec<Asset>, CloudScannerError> {
         info!("Mock EFS discovery");
         Ok(vec![
-            Resource::new("efs:filesystem".to_string(), "fs-12345678".to_string())
+            Asset::new("efs:filesystem".to_string(), "fs-12345678".to_string())
                 .with_metadata("name".to_string(), "mock-efs".to_string())
                 .with_metadata("region".to_string(), "us-east-1".to_string())
         ])

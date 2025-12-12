@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.2
 
 require (
-	git.arvancloud.ir/arvancloud/cdn-go-sdk v0.12.1
+	// git.arvancloud.ir/arvancloud/cdn-go-sdk v0.12.1
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.560
 	github.com/aws/aws-sdk-go v1.45.19
 	github.com/cloudflare/cloudflare-go v0.77.0
@@ -187,9 +187,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.2
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.275.0
 	github.com/dnsimple/dnsimple-go v1.7.0
+	github.com/gin-gonic/gin v1.10.0
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/projectdiscovery/networkpolicy v0.1.27
 	github.com/projectdiscovery/retryablehttp-go v1.0.129
 	github.com/vektah/gqlparser/v2 v2.5.31
+	modernc.org/sqlite v1.33.1
 )
 
 require (
@@ -240,6 +243,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/mholt/archives v0.1.0 // indirect
 	github.com/nwaples/rardecode/v2 v2.0.0-beta.4.0.20241112120701-034e449c6e78 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
